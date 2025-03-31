@@ -286,7 +286,6 @@ except Exception as e:
     print(f"タイムラインの挿入でエラー: {str(e)}")
     sys.exit(1)
 
-print("全ての処理が完了しました。")
 
 # 編集ポジションをタイムライン先頭に移動
 try:
@@ -294,3 +293,8 @@ try:
     print("編集ポジションをタイムライン先頭に移動しました。")
 except Exception as e:
     print(f"編集ポジションの移動でエラー: {str(e)}")
+    
+    
+print("全ての処理が完了しました。")
+
+
