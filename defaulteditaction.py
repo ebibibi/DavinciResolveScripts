@@ -150,27 +150,26 @@ start_frame = 0
 
 # V4トラックの各クリップをチェック
 try:
-    items_count = main_timeline.GetItemsInTrack("video", video_track)
+    items_in_track = main_timeline.GetItemsInTrack("video", video_track)
+    items_count = len(items_in_track)
     print(f"V{video_track}トラックのアイテム数: {items_count}")
     
     if items_count == 0:
         print(f"V{video_track}トラックにアイテムがありません。")
         op_clip_found = False
     else:
-        for i in range(items_count):
-            try:
-                item = main_timeline.GetItemInTrack("video", video_track, i+1)
-                clip_name = item.GetName()
-                print(f"V{video_track}トラックのクリップ {i+1}: {clip_name}")
-                # クリップ名をチェック
-                if "01_EBI_CHAN_OP" in clip_name:
-                    # オープニングクリップの終了フレームを取得
-                    start_frame = item.GetEnd()
-                    op_clip_found = True
-                    print(f"オープニングクリップが見つかりました。終了フレーム: {start_frame}")
-                    break
-            except Exception as e:
-                print(f"クリップ {i+1} の処理中にエラー: {str(e)}")
+        clip_index = 1
+        for item_id, item in items_in_track.items():
+            clip_name = item.GetName()
+            print(f"V{video_track}トラックのクリップ {clip_index}: {clip_name}")
+            # クリップ名をチェック
+            if "01_EBI_CHAN_OP" in clip_name:
+                # オープニングクリップの終了フレームを取得
+                start_frame = item.GetEnd()
+                op_clip_found = True
+                print(f"オープニングクリップが見つかりました。終了フレーム: {start_frame}")
+                break
+            clip_index += 1
 except Exception as e:
     print(f"V{video_track}トラックのアイテム数取得でエラー: {str(e)}")
     op_clip_found = False
@@ -196,15 +195,29 @@ try:
     
     # ビデオトラックからクリップを取得
     video_track_count = timeline.GetTrackCount("video")
+    print(f"Debug: video_track_count={video_track_count}")
     for track_idx in range(1, video_track_count + 1):
+        print(f"Debug: processing video track_idx={track_idx}")
         items_in_track = timeline.GetItemsInTrack("video", track_idx)
+        print(f"Debug: got items_in_track={items_in_track}, type={type(items_in_track)}")
         if items_in_track:
             for item_id, clip_obj in items_in_track.items():
+                print(f"Debug: video item_id={item_id}, clip_obj={clip_obj}, type={type(clip_obj)}")
                 if clip_obj:
-                    clip_start = clip_obj.GetStart()
-                    clip_end = clip_obj.GetEnd()
+                    clip_start, clip_end = None, None
+                    try:
+                        clip_start = clip_obj.GetLeftOffset()
+                        print(f"Debug: clip_start={clip_start}, type={type(clip_start)}")
+                        clip_duration = clip_obj.GetDuration()
+                        print(f"Debug: clip_duration={clip_duration}, type={type(clip_duration)}")
+                        clip_end = clip_duration + clip_start
+                        print(f"Debug: clip_end={clip_end}, type={type(clip_end)}")
+                        print(f"Debug: clip_start={clip_start}, clip_end={clip_end}, clip_name={clip_obj.GetName()}")
+                    except Exception as e:
+                        print(f"Debug: exception calling GetMediaIn/Out on {clip_obj}: {e}")
+                        continue
                     media_item = clip_obj.GetMediaPoolItem()
-                    if media_item:
+                    if media_item is not None and clip_start is not None and clip_end is not None:
                         clips_to_append.append({
                             'mediaPoolItem': media_item,
                             'startFrame': clip_start,
@@ -213,15 +226,29 @@ try:
     
     # オーディオトラックからクリップを取得
     audio_track_count = timeline.GetTrackCount("audio")
+    print(f"Debug: audio_track_count={audio_track_count}")
     for track_idx in range(1, audio_track_count + 1):
+        print(f"Debug: processing audio track_idx={track_idx}")
         items_in_track = timeline.GetItemsInTrack("audio", track_idx)
+        print(f"Debug: got items_in_track={items_in_track}, type={type(items_in_track)}")
         if items_in_track:
             for item_id, clip_obj in items_in_track.items():
+                print(f"Debug: audio item_id={item_id}, clip_obj={clip_obj}, type={type(clip_obj)}")
                 if clip_obj:
-                    clip_start = clip_obj.GetStart()
-                    clip_end = clip_obj.GetEnd()
+                    clip_start, clip_end = None, None
+                    try:
+                        clip_start = clip_obj.GetLeftOffset()
+                        print(f"Debug: clip_start={clip_start}, type={type(clip_start)}")
+                        clip_duration = clip_obj.GetDuration()
+                        print(f"Debug: clip_duration={clip_duration}, type={type(clip_duration)}")
+                        clip_end = clip_duration + clip_start
+                        print(f"Debug: clip_end={clip_end}, type={type(clip_end)}")
+                        print(f"Debug: clip_start={clip_start}, clip_end={clip_end}, clip_name={clip_obj.GetName()}")
+                    except Exception as e:
+                        print(f"Debug: exception calling GetStart/End on {clip_obj}: {e}")
+                        continue
                     media_item = clip_obj.GetMediaPoolItem()
-                    if media_item:
+                    if media_item is not None and clip_start is not None and clip_end is not None:
                         clips_to_append.append({
                             'mediaPoolItem': media_item,
                             'startFrame': clip_start,
@@ -230,16 +257,27 @@ try:
     
     print(f"挿入するクリップ数: {len(clips_to_append)}")
     
+    # 追加のデバッグプリント
+    print(f"Debug: timeline is {timeline}")
+    print(f"Debug: media_pool is {media_pool}")
+    print(f"Debug: main_timeline is {main_timeline}")
+    print(f"Debug: clips_to_append is {clips_to_append}")
+    
     # クリップが取得できた場合のみ挿入
     if clips_to_append:
         # 再生ヘッドを配置
         try:
-            main_timeline.SetCurrentTimecode(start_frame)
-        except:
-            try:
-                main_timeline.SetCurrentFrameNumber(start_frame)
-            except Exception as e:
-                print(f"再生ヘッド配置でエラー: {str(e)}")
+            main_timeline.SetCurrentFrame(start_frame)
+        except Exception as e:
+            print(f"再生ヘッド配置でエラー: {str(e)}")
+        
+        # Debug Insert Step: Variables in the try block
+        print("Debug Insert Step: Variables in the try block:")
+        print(f"  timeline: {timeline}, type={type(timeline)}")
+        print(f"  media_pool: {media_pool}, type={type(media_pool)}")
+        print(f"  main_timeline: {main_timeline}, type={type(main_timeline)}")
+        print(f"  start_frame: {start_frame}, type={type(start_frame)}")
+        print(f"  clips_to_append: {clips_to_append}, type={type(clips_to_append)}")
         
         # クリップをメインタイムラインに追加
         insert_result = media_pool.AppendToTimeline(clips_to_append)
