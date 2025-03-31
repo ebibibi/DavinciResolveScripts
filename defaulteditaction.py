@@ -47,6 +47,12 @@ if project is None:
     print("プロジェクトが開かれていません。終了します。")
     sys.exit(1)
 
+print("メインタイムラインを取得します")
+main_timeline = project.GetCurrentTimeline()
+if not main_timeline:
+    print("メインタイムラインが見つかりません。終了します。")
+    sys.exit(1)
+
 print("MediaPoolオブジェクトを取得します")
 media_pool = project.GetMediaPool()
 
@@ -129,27 +135,15 @@ except Exception as e:
     print(f"メインタイムラインのアクティブ化でエラー: {str(e)}")
     sys.exit(1)
 
-# メインタイムラインのトラック情報を取得
-try:
-    main_track_count = main_timeline.GetTrackCount("video")
-    print(f"メインタイムラインのビデオトラック数: {main_track_count}")
-    
-    if video_track > main_track_count:
-        print(f"指定されたV{video_track}トラックがメインタイムラインに存在しません。最後のトラック(V{main_track_count})を使用します。")
-        video_track = main_track_count
-except Exception as e:
-    print(f"メインタイムラインのトラック情報取得でエラー: {str(e)}")
-    # エラーが発生してもデフォルトのトラック番号を使用する
-    print(f"デフォルトのトラック番号({video_track})を使用します。")
-
 # オープニングクリップ(01_EBI_CHAN_OP.mov)の位置を探す
 print("オープニングクリップを探します")
 op_clip_found = False
 start_frame = 0
 # すでに上で検証済みのvideo_track変数を使用
 
-# V4トラックの各クリップをチェック
+# V1トラックの各クリップをチェック
 try:
+    video_track = 1  # V1トラックを指定
     items_in_track = main_timeline.GetItemsInTrack("video", video_track)
     items_count = len(items_in_track)
     print(f"V{video_track}トラックのアイテム数: {items_count}")
