@@ -218,37 +218,6 @@ try:
                             'endFrame': clip_end
                         })
     
-    # オーディオトラックからクリップを取得
-    audio_track_count = timeline.GetTrackCount("audio")
-    print(f"Debug: audio_track_count={audio_track_count}")
-    for track_idx in range(1, audio_track_count + 1):
-        print(f"Debug: processing audio track_idx={track_idx}")
-        items_in_track = timeline.GetItemsInTrack("audio", track_idx)
-        print(f"Debug: got items_in_track={items_in_track}, type={type(items_in_track)}")
-        if items_in_track:
-            for item_id, clip_obj in items_in_track.items():
-                print(f"Debug: audio item_id={item_id}, clip_obj={clip_obj}, type={type(clip_obj)}")
-                if clip_obj:
-                    clip_start, clip_end = None, None
-                    try:
-                        clip_start = clip_obj.GetLeftOffset()
-                        print(f"Debug: clip_start={clip_start}, type={type(clip_start)}")
-                        clip_duration = clip_obj.GetDuration()
-                        print(f"Debug: clip_duration={clip_duration}, type={type(clip_duration)}")
-                        clip_end = clip_duration + clip_start
-                        print(f"Debug: clip_end={clip_end}, type={type(clip_end)}")
-                        print(f"Debug: clip_start={clip_start}, clip_end={clip_end}, clip_name={clip_obj.GetName()}")
-                    except Exception as e:
-                        print(f"Debug: exception calling GetStart/End on {clip_obj}: {e}")
-                        continue
-                    media_item = clip_obj.GetMediaPoolItem()
-                    if media_item is not None and clip_start is not None and clip_end is not None:
-                        clips_to_append.append({
-                            'mediaPoolItem': media_item,
-                            'startFrame': clip_start,
-                            'endFrame': clip_end
-                        })
-    
     print(f"挿入するクリップ数: {len(clips_to_append)}")
     
     # 追加のデバッグプリント
