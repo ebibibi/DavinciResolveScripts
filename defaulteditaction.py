@@ -1,8 +1,40 @@
 import glob
 import os
 import sys
+import subprocess
+from pathlib import Path
 
 print("スクリプト開始")
+
+## auto-editorの実行
+# 作業ディレクトリへ移動
+working_dir = r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!OBS録画'
+os.chdir(working_dir)
+
+# 最新の .mkv ファイルを取得（最終更新日時が最新のもの）
+mkv_files = glob.glob("*.mkv")
+if not mkv_files:
+    print("指定ディレクトリに mkv ファイルが見つかりません。")
+    exit(1)
+
+latest_file = max(mkv_files, key=os.path.getmtime)
+
+# auto-editor のコマンドライン引数を組み立てる
+command = [
+    "auto-editor",
+    str(Path(working_dir) / latest_file),
+    "--margin", "0.2sec",
+    "--edit", "audio:threshold=1%",
+    "--export", "resolve"
+]
+
+# 実行内容を表示
+print("実行中:", ' '.join(command))
+
+# コマンドを実行
+subprocess.run(command)
+
+
 
 # XMLファイルが格納されたフォルダを指定
 xml_folder_paths = [
@@ -36,11 +68,13 @@ if ending_video_path is None:
 
 print(f"選択されたエンディング動画: {ending_video_path}")
 
-# 現在開いているプロジェクトを取得
+## Davinci Resolve API
 print("Resolveオブジェクトを取得します")
 resolve = app.GetResolve()
 print("ProjectManagerオブジェクトを取得します")
 project_manager = resolve.GetProjectManager()
+
+# 現在開いているプロジェクトを取得
 print("現在のプロジェクトを取得します")
 project = project_manager.GetCurrentProject()
 if project is None:
