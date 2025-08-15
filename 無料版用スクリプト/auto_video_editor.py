@@ -1,10 +1,20 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+DaVinci Resolve自動動画編集スクリプト（無料版）
+- auto-editorで無音部分を自動カット
+- エンディング動画を自動追加
+- 既存プロジェクトのタイムラインに統合
+"""
+
 import glob
 import os
 import sys
 import subprocess
 from pathlib import Path
 
-print("スクリプト開始")
+print("DaVinci Resolve自動動画編集スクリプト（無料版）開始")
 
 ## auto-editorの実行
 # 作業ディレクトリへ移動
