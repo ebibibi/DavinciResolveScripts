@@ -114,7 +114,7 @@ def run_auto_editor(working_dir):
     command = [
         "auto-editor",
         f'"{str(Path(working_dir) / latest_file)}"',
-        "--margin", "0.2sec",
+        "--margin", "0.5sec",
         "--edit", "audio:threshold=1%",
         "--export", "resolve"
     ]
