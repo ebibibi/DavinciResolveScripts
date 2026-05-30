@@ -102,13 +102,13 @@ def run_auto_editor(working_dir):
     print("auto-editorを実行中...")
     os.chdir(working_dir)
     
-    # 最新の .mkv ファイルを取得
-    mkv_files = glob.glob("*.mkv")
-    if not mkv_files:
-        print("✗ mkvファイルが見つかりません")
+    # 最新の .mkv / .mp4 ファイルを取得
+    video_files = glob.glob("*.mkv") + glob.glob("*.mp4")
+    if not video_files:
+        print("✗ mkv/mp4ファイルが見つかりません")
         return False
-    
-    latest_file = max(mkv_files, key=os.path.getmtime)
+
+    latest_file = max(video_files, key=os.path.getmtime)
     print(f"✓ 処理対象ファイル: {latest_file}")
     
     command = [
@@ -166,6 +166,29 @@ def create_project_from_template(pm, template_path, project_name):
     
     print("✗ テンプレートインポート失敗")
     return None
+
+def frame_to_timecode(timeline, frame):
+    """フレーム番号をタイムコード文字列(HH:MM:SS:FF)に変換する。
+
+    Resolve APIのTimelineにはSetCurrentFrame()が無く、再生ヘッドの移動は
+    SetCurrentTimecode()のみ。タイムラインのフレームレートを使って変換する。
+    """
+    # タイムラインのフレームレートを取得（例: "30.0", "29.97"）
+    try:
+        fps_raw = timeline.GetSetting("timelineFrameRate")
+        fps = int(round(float(fps_raw)))
+    except Exception:
+        fps = 30  # 取得失敗時のフォールバック
+    if fps <= 0:
+        fps = 30
+
+    frame = int(frame)
+    f = frame % fps
+    total_seconds = frame // fps
+    s = total_seconds % 60
+    m = (total_seconds // 60) % 60
+    h = total_seconds // 3600
+    return f"{h:02d}:{m:02d}:{s:02d}:{f:02d}"
 
 def append_clips_with_retry(media_pool, clips_to_append, max_retries=3, delay=2):
     """
@@ -440,10 +463,11 @@ def main():
         print(f"挿入するクリップ数: {len(clips_to_append)}")
         
         if clips_to_append:
-            # 再生ヘッドを配置（無料版の方法に合わせる）
+            # 再生ヘッドを配置（SetCurrentFrameはAPIに無いためタイムコードで指定）
             try:
-                main_timeline.SetCurrentFrame(start_frame)
-                print(f"再生ヘッド位置を {start_frame} に設定しました")
+                target_tc = frame_to_timecode(main_timeline, start_frame)
+                main_timeline.SetCurrentTimecode(target_tc)
+                print(f"再生ヘッド位置を {start_frame} フレーム ({target_tc}) に設定しました")
             except Exception as e:
                 print(f"再生ヘッド配置でエラー: {str(e)}")
             
