@@ -1,0 +1,21 @@
+{
+  "working_dirs": [
+    "C:\\Users\\YOUR_NAME\\Videos\\OBS"
+  ],
+  "xml_dirs": [
+    "C:\\Users\\YOUR_NAME\\Videos\\OBS"
+  ],
+  "ending_video_paths": [
+    "C:\\Users\\YOUR_NAME\\Videos\\Assets\\ending.mov"
+  ],
+  "op_clip_name": "01_EBI_CHAN_OP",
+  "whisper_language": "Japanese",
+  "ai_keywords": [
+    "Claude Code",
+    "MCP",
+    "API",
+    "Hooks",
+    "GitHub",
+    "自動化"
+  ]
+}

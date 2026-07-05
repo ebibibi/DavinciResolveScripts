@@ -22,6 +22,10 @@
 - テンプレート.drpからの自動プロジェクト作成
 - リトライ機能付きクリップ追加（安定性向上）
 - クロスプラットフォーム対応（Windows/Mac/Linux）
+- AI編集補助（試験機能）
+  - `whisper` CLIが利用できる場合、録画音声を文字起こしして章マーカー・重要語マーカー・QCマーカーの草案を追加
+  - `ffmpeg` と `Pillow` が利用できる場合、冒頭フックカード動画を自動生成して本編先頭に追加
+  - 依存ツールが無い場合や処理に失敗した場合も、従来の自動編集処理は継続
 
 ## ファイル構成
 
@@ -30,8 +34,9 @@ DavinciResolveScripts/
 ├── README.md
 ├── 有償版用スクリプト/
 │   ├── auto_video_editor.py （メインスクリプト）
-│   ├── run_auto_video_editor.bat （実行用バッチファイル）
-│   ├── create_desktop_shortcut.bat （ショートカット作成）
+│   ├── run_auto_video_editor.ps1 （実行用PowerShellスクリプト）
+│   ├── create_desktop_shortcut.ps1 （ショートカット作成）
+│   ├── config.example.json （ローカル設定サンプル）
 │   └── テンプレート.drp （プロジェクトテンプレート）
 └── 無料版用スクリプト/
     ├── auto_video_editor.py （メインスクリプト）
@@ -45,6 +50,13 @@ DavinciResolveScripts/
 - Python 3.6以上
 - auto-editor（`pip install auto-editor`）
 
+### 任意環境（有償版のAI編集補助）
+- whisper CLI（例: `pip install openai-whisper`）
+- Pillow（例: `pip install Pillow`）
+- ffmpeg（フックカード動画生成に使用）
+
+AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0` を設定してください。
+
 ### フォルダ構造
 以下のフォルダ構造が必要です：
 - OBS録画データが保存されているフォルダ
@@ -55,11 +67,11 @@ DavinciResolveScripts/
 ### 有償版の場合
 
 #### 方法1: バッチファイル実行（推奨）
-1. `有償版用スクリプト\run_auto_video_editor.bat` をダブルクリック
+1. `有償版用スクリプト\run_auto_video_editor.ps1` を右クリックしてPowerShellで実行
 2. 自動的に環境チェックが実行され、スクリプトが起動します
 
 #### 方法2: デスクトップショートカット作成
-1. `有償版用スクリプト\create_desktop_shortcut.bat` をダブルクリック
+1. `有償版用スクリプト\create_desktop_shortcut.ps1` を右クリックしてPowerShellで実行
 2. デスクトップにショートカットが作成されます
 3. 作成されたショートカットをダブルクリックして実行
 
@@ -99,29 +111,76 @@ DavinciResolveScripts/
 - オープニング後に新しいコンテンツを挿入
 - 編集ポジションをタイムライン先頭に移動
 
+### 6. AI編集補助（有償版・試験機能）
+- `auto-editor` 実行後、最新録画を `whisper` で文字起こし
+- `_ai_assist/ai_edit_plan.json` と `_ai_assist/chapters_draft.txt` を出力
+- DaVinci Resolveのタイムラインに以下のドラフトマーカーを追加
+  - Blue: 章マーカー
+  - Yellow: 重要語マーカー
+  - Red: QC確認ポイント
+  - Green: 冒頭フック
+- `ffmpeg` と `Pillow` が利用できる場合、AIが選んだ冒頭フック文を4秒のカード動画として本編先頭に追加
+
+マーカーやフックカードは編集のたたき台です。不要であればDaVinci Resolve上で削除・調整してください。
+
 ## カスタマイズ
 
-スクリプト内の以下のパスを環境に合わせて変更してください：
+有償版では、スクリプトを直接編集せずに `config.local.json` または環境変数でローカル環境を指定できます。
+
+### 方法1: config.local.json（推奨）
+
+`有償版用スクリプト/config.example.json` を `config.local.json` にコピーし、自分の環境に合わせて編集してください。
+`config.local.json` は `.gitignore` 済みなので、GitHubには公開されません。
+
+```json
+{
+  "working_dirs": [
+    "C:\\Users\\YOUR_NAME\\Videos\\OBS"
+  ],
+  "xml_dirs": [
+    "C:\\Users\\YOUR_NAME\\Videos\\OBS"
+  ],
+  "ending_video_paths": [
+    "C:\\Users\\YOUR_NAME\\Videos\\Assets\\ending.mov"
+  ],
+  "op_clip_name": "01_EBI_CHAN_OP",
+  "whisper_language": "Japanese",
+  "ai_keywords": [
+    "Claude Code",
+    "MCP",
+    "API",
+    "Hooks",
+    "GitHub",
+    "自動化"
+  ]
+}
+```
+
+### 方法2: 環境変数
+
+環境変数は `config.local.json` より優先されます。複数パスはWindowsではセミコロン区切りで指定します。
 
 ### 1. 作業ディレクトリ（OBS録画データの保存場所）
-```python
-working_dir = r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!OBS録画'
+```powershell
+$env:DAVINCI_WORKING_DIRS = "C:\Users\YOUR_NAME\Videos\OBS"
 ```
 
 ### 2. XMLフォルダの候補パス
-```python
-xml_folder_paths = [
-    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!OBS録画',
-    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!OBS録画'
-]
+```powershell
+$env:DAVINCI_XML_DIRS = "C:\Users\YOUR_NAME\Videos\OBS"
 ```
 
 ### 3. エンディング動画のパス
-```python
-ending_video_paths = [
-    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
-    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov'
-]
+```powershell
+$env:DAVINCI_ENDING_VIDEO_PATHS = "C:\Users\YOUR_NAME\Videos\Assets\ending.mov"
+```
+
+### 4. その他の設定
+```powershell
+$env:DAVINCI_OP_CLIP_NAME = "01_EBI_CHAN_OP"
+$env:DAVINCI_WHISPER_LANGUAGE = "Japanese"
+$env:DAVINCI_AI_KEYWORDS = "Claude Code,MCP,API,Hooks,GitHub,自動化"
+$env:DAVINCI_AI_ASSIST = "1"
 ```
 
 ## 注意事項
@@ -167,6 +226,7 @@ ending_video_paths = [
 - **クロスプラットフォーム対応**: Windows、Mac、Linux自動対応
 - **オブジェクト再取得**: 安定性向上のための自動オブジェクト更新
 - **詳細ログ**: トラブルシューティング用の詳細情報出力
+- **AI編集補助**: whisper文字起こしが可能な環境では、章・重要語・QCマーカーと冒頭フックカードを自動生成
 
 ### パフォーマンス
 - 大量クリップ（300+）の処理に対応

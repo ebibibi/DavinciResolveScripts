@@ -15,10 +15,92 @@ import time
 import subprocess
 import platform
 import glob
+import json
+import re
+import shutil
+import textwrap
 from datetime import datetime
 from pathlib import Path
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
+
+AI_ASSIST_ENABLED = os.environ.get("DAVINCI_AI_ASSIST", "1").lower() not in ("0", "false", "no")
+AI_ASSIST_DIR_NAME = "_ai_assist"
+HOOK_CARD_SECONDS = 4
+CHAPTER_INTERVAL_SECONDS = 180
+DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
+DEFAULT_WHISPER_LANGUAGE = "Japanese"
+DEFAULT_KEYWORD_PATTERNS = [
+    "Claude Code",
+    "CLAUDE.md",
+    "コンテキスト",
+    "Hooks",
+    "Hook",
+    "MCP",
+    "API",
+    "スキル",
+    "サブエージェント",
+    "検証",
+    "自動化",
+    "WSL",
+    "GitHub",
+    "CI/CD",
+]
+
+def load_local_config():
+    """git管理外のローカル設定を読み込む"""
+    config_path = os.environ.get("DAVINCI_CONFIG")
+    if not config_path:
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.local.json")
+    if not os.path.exists(config_path):
+        return {}
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        print(f"✓ ローカル設定を読み込みました: {config_path}")
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        print(f"! ローカル設定の読み込みに失敗しました: {e}")
+        return {}
+
+LOCAL_CONFIG = load_local_config()
+
+def split_env_values(name):
+    """環境変数をOS標準の区切り文字で分割"""
+    value = os.environ.get(name, "")
+    return [item.strip().strip('"') for item in value.split(os.pathsep) if item.strip()]
+
+def config_list(key):
+    """config.local.jsonの値をリストとして取得"""
+    value = LOCAL_CONFIG.get(key)
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [item.strip().strip('"') for item in value.split(os.pathsep) if item.strip()]
+    return []
+
+def configured_paths(env_name, config_key):
+    """環境変数またはconfig.local.jsonからパス候補を取得"""
+    values = split_env_values(env_name)
+    return values or config_list(config_key)
+
+def configured_value(env_name, config_key, default_value):
+    """環境変数またはconfig.local.jsonから単一値を取得"""
+    return os.environ.get(env_name) or LOCAL_CONFIG.get(config_key) or default_value
+
+def first_existing_path(paths):
+    """候補から最初に存在するパスを返す"""
+    return next((path for path in paths if os.path.exists(path)), None)
+
+def get_ai_keywords():
+    """AI補助で拾う重要語。環境変数でカンマ区切り上書き可。"""
+    value = configured_value("DAVINCI_AI_KEYWORDS", "ai_keywords", "")
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    value = str(value)
+    if value.strip():
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return DEFAULT_KEYWORD_PATTERNS
 
 def add_resolve_api_to_sys_path():
     """DaVinci Resolve APIのパスをsys.pathに追加"""
@@ -109,31 +191,31 @@ def run_auto_editor(working_dir):
         return False
 
     latest_file = max(video_files, key=os.path.getmtime)
+    latest_path = Path(working_dir) / latest_file
     print(f"✓ 処理対象ファイル: {latest_file}")
     
     command = [
         "auto-editor",
-        f'"{str(Path(working_dir) / latest_file)}"',
+        str(latest_path),
         "--margin", "0.5sec",
         "--edit", "audio:threshold=1%",
         "--export", "resolve"
     ]
     
-    command_str = ' '.join(command)
-    print(f"実行コマンド: {command_str}")
+    print("実行コマンド:", " ".join(command))
     
     try:
-        result = subprocess.run(command_str, shell=True, capture_output=True, text=True, check=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
         print("✓ auto-editor実行成功")
         print(result.stdout)
-        return True
+        return latest_path
     except subprocess.CalledProcessError as e:
         print(f"✗ auto-editor実行失敗: {e}")
         print(f"エラー出力: {e.stderr}")
         return False
     except FileNotFoundError:
         print("✗ auto-editorが見つかりません")
-        return False
+        return None
 
 def create_project_from_template(pm, template_path, project_name):
     """テンプレートから新しいプロジェクトを作成"""
@@ -173,14 +255,7 @@ def frame_to_timecode(timeline, frame):
     Resolve APIのTimelineにはSetCurrentFrame()が無く、再生ヘッドの移動は
     SetCurrentTimecode()のみ。タイムラインのフレームレートを使って変換する。
     """
-    # タイムラインのフレームレートを取得（例: "30.0", "29.97"）
-    try:
-        fps_raw = timeline.GetSetting("timelineFrameRate")
-        fps = int(round(float(fps_raw)))
-    except Exception:
-        fps = 30  # 取得失敗時のフォールバック
-    if fps <= 0:
-        fps = 30
+    fps = get_timeline_fps(timeline)
 
     frame = int(frame)
     f = frame % fps
@@ -189,6 +264,384 @@ def frame_to_timecode(timeline, frame):
     m = (total_seconds // 60) % 60
     h = total_seconds // 3600
     return f"{h:02d}:{m:02d}:{s:02d}:{f:02d}"
+
+def get_timeline_fps(timeline):
+    """タイムラインのフレームレートを整数で取得"""
+    try:
+        fps_raw = timeline.GetSetting("timelineFrameRate")
+        fps = int(round(float(fps_raw)))
+    except Exception:
+        fps = 30
+    return fps if fps > 0 else 30
+
+def clean_text(text):
+    """文字起こしテキストを短い表示用に整える"""
+    text = re.sub(r"\s+", " ", text or "").strip()
+    text = re.sub(r"^(えー|えっと|あの|その|まあ|はい)[、,\s]*", "", text)
+    return text
+
+def shorten_text(text, limit=34):
+    text = clean_text(text)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+def segment_is_useful(segment):
+    text = clean_text(segment.get("text", ""))
+    return len(text) >= 12 and not re.fullmatch(r"[、。,.!\s]+", text)
+
+def load_transcript_segments(transcript_path):
+    """Whisper JSONからセグメントを読み込む"""
+    with open(transcript_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    segments = []
+    for item in data.get("segments", []):
+        text = clean_text(item.get("text", ""))
+        if not text:
+            continue
+        try:
+            start = float(item.get("start", 0))
+            end = float(item.get("end", start))
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            end = start + 1
+        segments.append({"start": start, "end": end, "text": text})
+    return segments
+
+def run_whisper_transcription(source_video_path, output_dir):
+    """whisper CLIがあれば文字起こしを実行し、JSONパスを返す"""
+    whisper_exe = shutil.which("whisper")
+    if not whisper_exe:
+        print("! whisper CLIが見つかりません。AI補助をスキップします。")
+        return None
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    transcript_path = output_dir / f"{source_video_path.stem}.json"
+    if transcript_path.exists() and transcript_path.stat().st_mtime >= source_video_path.stat().st_mtime:
+        print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
+        return transcript_path
+
+    command = [
+        whisper_exe,
+        str(source_video_path),
+        "--language",
+        configured_value("DAVINCI_WHISPER_LANGUAGE", "whisper_language", DEFAULT_WHISPER_LANGUAGE),
+        "--task",
+        "transcribe",
+        "--output_format",
+        "json",
+        "--output_dir",
+        str(output_dir),
+    ]
+    print("whisper文字起こしを実行中...")
+    print("実行コマンド:", " ".join(command))
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! whisper文字起こしに失敗しました: {e}")
+        if e.stderr:
+            print(e.stderr)
+        return None
+
+    if transcript_path.exists():
+        print(f"✓ 文字起こしJSON作成: {transcript_path}")
+        return transcript_path
+
+    print("! whisper実行後にJSONが見つかりませんでした。")
+    return None
+
+def choose_hook_text(segments):
+    """冒頭に置く短い結論カードの文言を決める"""
+    useful_segments = [s for s in segments if segment_is_useful(s)]
+    if not useful_segments:
+        return ""
+
+    keyword_segments = [
+        s for s in useful_segments[:20]
+        if any(keyword.lower() in s["text"].lower() for keyword in get_ai_keywords())
+    ]
+    chosen = keyword_segments[0] if keyword_segments else useful_segments[0]
+    return "今回のポイント: " + shorten_text(chosen["text"], 42)
+
+def build_chapters(segments):
+    """文字起こしからYouTube/Resolve用の章ドラフトを作る"""
+    useful_segments = [s for s in segments if segment_is_useful(s)]
+    if not useful_segments:
+        return []
+
+    chapters = [{"time": 0.0, "title": "導入"}]
+    next_boundary = CHAPTER_INTERVAL_SECONDS
+    for segment in useful_segments:
+        if segment["start"] < next_boundary:
+            continue
+        title = shorten_text(segment["text"], 28)
+        chapters.append({"time": segment["start"], "title": title})
+        next_boundary += CHAPTER_INTERVAL_SECONDS
+        if len(chapters) >= 12:
+            break
+    return chapters
+
+def build_keyword_cues(segments):
+    """重要語が出た箇所をマーカー候補にする"""
+    cues = []
+    seen = set()
+    for segment in segments:
+        text_lower = segment["text"].lower()
+        for keyword in get_ai_keywords():
+            if keyword.lower() not in text_lower:
+                continue
+            bucket = (keyword, int(segment["start"] // 30))
+            if bucket in seen:
+                continue
+            seen.add(bucket)
+            cues.append({
+                "time": segment["start"],
+                "keyword": keyword,
+                "note": shorten_text(segment["text"], 60),
+            })
+            break
+        if len(cues) >= 24:
+            break
+    return cues
+
+def build_qc_notes(segments):
+    """編集時に見るべき箇所を簡易検出する"""
+    notes = []
+    previous_end = None
+    for segment in segments:
+        if previous_end is not None:
+            gap = segment["start"] - previous_end
+            if gap >= 8:
+                notes.append({
+                    "time": previous_end,
+                    "type": "long_gap",
+                    "message": f"{gap:.1f}秒の発話ギャップがあります",
+                })
+        duration = segment["end"] - segment["start"]
+        if duration <= 0.4 and len(segment["text"]) >= 6:
+            notes.append({
+                "time": segment["start"],
+                "type": "short_segment",
+                "message": "短すぎる発話断片です",
+            })
+        previous_end = segment["end"]
+        if len(notes) >= 20:
+            break
+    return notes
+
+def write_ai_assist_files(ai_plan, output_dir):
+    """後段や手動確認用のファイルを書き出す"""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plan_path = output_dir / "ai_edit_plan.json"
+    chapters_path = output_dir / "chapters_draft.txt"
+
+    with open(plan_path, "w", encoding="utf-8") as f:
+        json.dump(ai_plan, f, ensure_ascii=False, indent=2)
+
+    with open(chapters_path, "w", encoding="utf-8") as f:
+        for chapter in ai_plan.get("chapters", []):
+            seconds = int(chapter["time"])
+            f.write(f"{seconds // 60:02d}:{seconds % 60:02d} {chapter['title']}\n")
+
+    print(f"✓ AI編集プランを書き出しました: {plan_path}")
+    print(f"✓ チャプター草案を書き出しました: {chapters_path}")
+
+def create_hook_card_asset(ai_plan, output_dir):
+    """Pillowとffmpegがあれば、冒頭フックカード動画を作る"""
+    hook_text = ai_plan.get("hook_text")
+    if not hook_text:
+        return None
+    if not shutil.which("ffmpeg"):
+        print("! ffmpegが見つかりません。フックカード動画の生成をスキップします。")
+        return None
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        print("! Pillowが見つかりません。フックカード動画の生成をスキップします。")
+        return None
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    png_path = output_dir / "hook_card.png"
+    video_path = output_dir / "hook_card.mp4"
+
+    image = Image.new("RGB", (1920, 1080), (18, 24, 31))
+    draw = ImageDraw.Draw(image)
+    font_candidates = [
+        r"C:\Windows\Fonts\meiryo.ttc",
+        r"C:\Windows\Fonts\YuGothB.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    title_font = None
+    body_font = None
+    for font_path in font_candidates:
+        if os.path.exists(font_path):
+            title_font = ImageFont.truetype(font_path, 54)
+            body_font = ImageFont.truetype(font_path, 76)
+            break
+    if title_font is None:
+        title_font = ImageFont.load_default()
+        body_font = ImageFont.load_default()
+
+    draw.rectangle((0, 0, 1920, 1080), fill=(18, 24, 31))
+    draw.rectangle((120, 116, 1800, 964), outline=(70, 130, 180), width=5)
+    draw.text((160, 168), "AI DRAFT HOOK", fill=(102, 204, 255), font=title_font)
+
+    wrapped = textwrap.wrap(hook_text, width=22)
+    y = 390
+    for line in wrapped[:4]:
+        draw.text((160, y), line, fill=(245, 248, 250), font=body_font)
+        y += 110
+    draw.text((160, 875), "必要ならDaVinci上で削除・編集してください", fill=(180, 190, 200), font=title_font)
+    image.save(png_path)
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-loop",
+        "1",
+        "-i",
+        str(png_path),
+        "-t",
+        str(HOOK_CARD_SECONDS),
+        "-r",
+        "30",
+        "-pix_fmt",
+        "yuv420p",
+        str(video_path),
+    ]
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! フックカード動画の生成に失敗しました: {e}")
+        if e.stderr:
+            print(e.stderr)
+        return None
+
+    print(f"✓ フックカード動画を作成しました: {video_path}")
+    return str(video_path)
+
+def build_ai_assist_plan(source_video_path, working_dir):
+    """文字起こしからDaVinci上に置く補助情報を作る。失敗時は空プランを返す。"""
+    empty_plan = {
+        "enabled": False,
+        "hook_text": "",
+        "hook_asset_path": "",
+        "chapters": [],
+        "keyword_cues": [],
+        "qc_notes": [],
+        "source_duration": 0,
+    }
+    if not AI_ASSIST_ENABLED:
+        print("! DAVINCI_AI_ASSIST=0 のためAI補助をスキップします。")
+        return empty_plan
+
+    output_dir = Path(working_dir) / AI_ASSIST_DIR_NAME
+    try:
+        transcript_path = run_whisper_transcription(Path(source_video_path), output_dir)
+        if not transcript_path:
+            return empty_plan
+
+        segments = load_transcript_segments(transcript_path)
+        if not segments:
+            print("! 文字起こしセグメントが空です。AI補助をスキップします。")
+            return empty_plan
+
+        ai_plan = {
+            "enabled": True,
+            "source_video": str(source_video_path),
+            "transcript_path": str(transcript_path),
+            "hook_text": choose_hook_text(segments),
+            "chapters": build_chapters(segments),
+            "keyword_cues": build_keyword_cues(segments),
+            "qc_notes": build_qc_notes(segments),
+            "source_duration": segments[-1]["end"],
+        }
+        hook_asset_path = create_hook_card_asset(ai_plan, output_dir)
+        ai_plan["hook_asset_path"] = hook_asset_path or ""
+        write_ai_assist_files(ai_plan, output_dir)
+        return ai_plan
+    except Exception as e:
+        print(f"! AI補助処理でエラーが発生しました。従来処理を続行します: {e}")
+        return empty_plan
+
+def prepare_hook_clip(media_pool, ai_plan, fps):
+    """フックカード動画をメディアプールに読み込み、挿入用clipInfoを返す"""
+    hook_asset_path = ai_plan.get("hook_asset_path")
+    if not hook_asset_path or not os.path.exists(hook_asset_path):
+        return None
+
+    try:
+        hook_clips = media_pool.ImportMedia([hook_asset_path])
+        if not hook_clips:
+            print("! フックカード動画のインポートに失敗しました。")
+            return None
+        hook_clip = hook_clips[0]
+        try:
+            hook_frames = int(hook_clip.GetClipProperty("Frames"))
+        except Exception:
+            hook_frames = HOOK_CARD_SECONDS * fps
+        hook_frames = max(hook_frames, HOOK_CARD_SECONDS * fps)
+        print(f"✓ フックカードを挿入候補に追加: {hook_clip.GetName()} ({hook_frames} frames)")
+        return {
+            "mediaPoolItem": hook_clip,
+            "startFrame": 0,
+            "endFrame": hook_frames,
+        }, hook_frames
+    except Exception as e:
+        print(f"! フックカード準備でエラー: {e}")
+        return None
+
+def map_source_time_to_edited_frame(source_seconds, source_duration, edited_duration_frames):
+    """元動画時間をauto-editor後タイムラインの近似フレームへ変換"""
+    if source_duration <= 0 or edited_duration_frames <= 0:
+        return 0
+    ratio = min(max(source_seconds / source_duration, 0), 1)
+    return int(ratio * edited_duration_frames)
+
+def add_ai_assist_markers(timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames=0):
+    """mainタイムライン上にAI補助マーカーを追加"""
+    if not ai_plan.get("enabled"):
+        return
+    if not hasattr(timeline, "AddMarker"):
+        print("! このResolve APIではAddMarkerが使えません。マーカー追加をスキップします。")
+        return
+
+    source_duration = float(ai_plan.get("source_duration") or 0)
+    content_start_frame = start_frame + hook_frames
+    added = 0
+
+    def add_marker(source_time, color, name, note):
+        nonlocal added
+        mapped = map_source_time_to_edited_frame(source_time, source_duration, edited_duration_frames)
+        frame = int(content_start_frame + mapped)
+        try:
+            ok = timeline.AddMarker(frame, color, name, note, 1, "")
+        except Exception as e:
+            print(f"! マーカー追加エラー ({name}): {e}")
+            return
+        if ok:
+            added += 1
+
+    if ai_plan.get("hook_text"):
+        try:
+            timeline.AddMarker(int(start_frame), "Green", "AI Hook", ai_plan["hook_text"], max(1, hook_frames), "")
+            added += 1
+        except Exception as e:
+            print(f"! フックマーカー追加エラー: {e}")
+
+    for chapter in ai_plan.get("chapters", []):
+        add_marker(float(chapter["time"]), "Blue", "Chapter: " + chapter["title"], "AI chapter draft")
+
+    for cue in ai_plan.get("keyword_cues", []):
+        add_marker(float(cue["time"]), "Yellow", "Keyword: " + cue["keyword"], cue.get("note", ""))
+
+    for note in ai_plan.get("qc_notes", []):
+        add_marker(float(note["time"]), "Red", "QC: " + note["type"], note.get("message", ""))
+
+    print(f"✓ AI補助マーカーを追加しました: {added}件")
 
 def append_clips_with_retry(media_pool, clips_to_append, max_retries=3, delay=2):
     """
@@ -315,17 +768,22 @@ def main():
             sys.exit(1)
     
     # auto-editorの実行
-    working_dir = r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!OBS録画'
-    if not run_auto_editor(working_dir):
+    working_dir = first_existing_path(configured_paths("DAVINCI_WORKING_DIRS", "working_dirs"))
+    if not working_dir:
+        print("✗ OBS録画フォルダが見つかりません")
+        print("  環境変数 DAVINCI_WORKING_DIRS に録画フォルダを指定してください")
+        sys.exit(1)
+    print(f"✓ OBS録画フォルダ: {working_dir}")
+    source_video_path = run_auto_editor(working_dir)
+    if not source_video_path:
         print("✗ auto-editor実行失敗")
         sys.exit(1)
+
+    # AI補助情報の作成（失敗しても従来処理を続行）
+    ai_plan = build_ai_assist_plan(source_video_path, working_dir)
     
     # XMLファイルの検索とインポート
-    xml_folder_paths = [
-        r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!OBS録画',
-        r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!OBS録画'
-    ]
-    
+    xml_folder_paths = configured_paths("DAVINCI_XML_DIRS", "xml_dirs")
     xml_folder_path = next((path for path in xml_folder_paths if os.path.exists(path)), None)
     if not xml_folder_path:
         print("✗ XMLフォルダが見つかりません")
@@ -355,12 +813,8 @@ def main():
     print(f"✓ XMLタイムラインインポート成功: {xml_timeline.GetName()}")
     
     # エンディング動画をXMLタイムラインに追加
-    ending_video_paths = [
-        r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
-        r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov'
-    ]
-    
-    ending_video_path = next((path for path in ending_video_paths if os.path.exists(path)), None)
+    ending_video_paths = configured_paths("DAVINCI_ENDING_VIDEO_PATHS", "ending_video_paths")
+    ending_video_path = first_existing_path(ending_video_paths)
     if ending_video_path:
         print(f"✓ エンディング動画: {ending_video_path}")
         
@@ -415,7 +869,8 @@ def main():
                 clip_name = item.GetName()
                 print(f"V{video_track}トラックのクリップ {clip_index}: {clip_name}")
                 # オープニングクリップをチェック
-                if "01_EBI_CHAN_OP" in clip_name:
+                op_clip_name = configured_value("DAVINCI_OP_CLIP_NAME", "op_clip_name", DEFAULT_OP_CLIP_NAME)
+                if op_clip_name in clip_name:
                     start_frame = item.GetEnd()
                     op_clip_found = True
                     print(f"オープニングクリップが見つかりました。終了フレーム: {start_frame}")
@@ -460,6 +915,19 @@ def main():
                             print(f"クリップ情報取得エラー: {e}")
                             continue
         
+        edited_duration_frames = sum(
+            max(0, int(clip.get('endFrame', 0)) - int(clip.get('startFrame', 0)))
+            for clip in clips_to_append
+        )
+
+        fps = get_timeline_fps(main_timeline)
+        hook_frames = 0
+        hook_clip_result = prepare_hook_clip(media_pool, ai_plan, fps)
+        if hook_clip_result:
+            hook_clip_info, hook_frames = hook_clip_result
+            clips_to_append.insert(0, hook_clip_info)
+            print("✓ フックカードを本編先頭に追加します")
+
         print(f"挿入するクリップ数: {len(clips_to_append)}")
         
         if clips_to_append:
@@ -487,6 +955,14 @@ def main():
             
             if insert_result:
                 print(f"✓ mainタイムラインの位置 {start_frame} にクリップを挿入しました")
+                add_ai_assist_markers(
+                    main_timeline,
+                    start_frame,
+                    ai_plan,
+                    fps,
+                    edited_duration_frames,
+                    hook_frames=hook_frames,
+                )
             else:
                 print("✗ クリップの挿入に失敗しました")
                 
