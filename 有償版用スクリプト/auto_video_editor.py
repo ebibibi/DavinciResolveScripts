@@ -30,21 +30,64 @@ HOOK_CARD_SECONDS = 4
 CHAPTER_INTERVAL_SECONDS = 180
 DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 DEFAULT_WHISPER_LANGUAGE = "Japanese"
-DEFAULT_KEYWORD_PATTERNS = [
-    "Claude Code",
-    "CLAUDE.md",
-    "コンテキスト",
-    "Hooks",
-    "Hook",
-    "MCP",
-    "API",
-    "スキル",
-    "サブエージェント",
+KEY_CUE_PHRASES = [
+    "重要",
+    "ポイント",
+    "結論",
+    "つまり",
+    "要するに",
+    "ここで",
+    "実際に",
+    "注意",
+    "理由",
+    "違い",
+    "おすすめ",
+    "メリット",
+    "デメリット",
+    "まとめ",
+]
+COMMON_LATIN_WORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "this",
+    "that",
+    "you",
+    "are",
+    "is",
+    "to",
+    "of",
+    "in",
+    "on",
+    "it",
+    "as",
+    "or",
+    "from",
+    "by",
+    "video",
+    "movie",
+    "file",
+    "mp4",
+    "mov",
+    "mkv",
+}
+TECH_SUFFIXES = [
+    "管理",
+    "設定",
+    "連携",
     "検証",
+    "実装",
     "自動化",
-    "WSL",
-    "GitHub",
-    "CI/CD",
+    "環境",
+    "編集",
+    "録画",
+    "字幕",
+    "マーカー",
+    "タイムライン",
+    "スクリプト",
+    "プロジェクト",
+    "テンプレート",
 ]
 
 def load_local_config():
@@ -92,15 +135,19 @@ def first_existing_path(paths):
     """候補から最初に存在するパスを返す"""
     return next((path for path in paths if os.path.exists(path)), None)
 
-def get_ai_keywords():
-    """AI補助で拾う重要語。環境変数でカンマ区切り上書き可。"""
-    value = configured_value("DAVINCI_AI_KEYWORDS", "ai_keywords", "")
+def get_priority_terms():
+    """必要に応じて手動で優先する用語。自動抽出の補助としてだけ使う。"""
+    value = (
+        os.environ.get("DAVINCI_PRIORITY_TERMS")
+        or LOCAL_CONFIG.get("priority_terms")
+        or ""
+    )
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
     value = str(value)
     if value.strip():
         return [item.strip() for item in value.split(",") if item.strip()]
-    return DEFAULT_KEYWORD_PATTERNS
+    return []
 
 def add_resolve_api_to_sys_path():
     """DaVinci Resolve APIのパスをsys.pathに追加"""
@@ -290,6 +337,73 @@ def segment_is_useful(segment):
     text = clean_text(segment.get("text", ""))
     return len(text) >= 12 and not re.fullmatch(r"[、。,.!\s]+", text)
 
+def unique_keep_order(items):
+    """順序を保って重複を除く"""
+    seen = set()
+    unique = []
+    for item in items:
+        key = item.lower() if isinstance(item, str) else item
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
+
+def normalize_term(term):
+    """マーカー名にしやすい形へ整える"""
+    term = clean_text(term).strip("、。,.!?「」『』()[]{}")
+    for prefix in ("ここで実際に", "ここから", "最後に", "今日は", "今回", "実際に"):
+        if term.startswith(prefix):
+            term = term[len(prefix):]
+            break
+    term = term.strip("をにのはがで、。,.!? ")
+    return term
+
+def extract_terms_from_text(text):
+    """固定リストではなく、発話内から目立つ用語を拾う"""
+    text = clean_text(text)
+    terms = []
+
+    for term in get_priority_terms():
+        if term and term.lower() in text.lower():
+            terms.append(term)
+
+    for match in re.findall(r"[A-Za-z][A-Za-z0-9+#./_-]{1,}(?:\s+[A-Za-z][A-Za-z0-9+#./_-]{1,})+", text):
+        normalized = normalize_term(match)
+        if 3 <= len(normalized) <= 40:
+            terms.append(normalized)
+
+    for match in re.findall(r"[A-Za-z][A-Za-z0-9+#./_-]{1,}", text):
+        normalized = normalize_term(match)
+        if len(normalized) < 2:
+            continue
+        if normalized.lower() in COMMON_LATIN_WORDS:
+            continue
+        terms.append(normalized)
+
+    for suffix in TECH_SUFFIXES:
+        pattern = rf"[一-龥ぁ-んァ-ンA-Za-z0-9_+#./-]{{2,}}{re.escape(suffix)}"
+        for match in re.findall(pattern, text):
+            normalized = normalize_term(match)
+            if 2 <= len(normalized) <= 24:
+                terms.append(normalized)
+
+    return unique_keep_order(terms)[:5]
+
+def segment_has_key_cue(segment):
+    """強調フレーズや用語があるセグメントをキーポイント候補にする"""
+    text = clean_text(segment.get("text", ""))
+    if any(phrase in text for phrase in KEY_CUE_PHRASES):
+        return True
+    return bool(extract_terms_from_text(text))
+
+def key_point_label(segment):
+    """マーカー名に使う短いラベルを作る"""
+    terms = extract_terms_from_text(segment.get("text", ""))
+    if terms:
+        return terms[0]
+    return shorten_text(segment.get("text", ""), 24)
+
 def load_transcript_segments(transcript_path):
     """Whisper JSONからセグメントを読み込む"""
     with open(transcript_path, "r", encoding="utf-8") as f:
@@ -357,11 +471,8 @@ def choose_hook_text(segments):
     if not useful_segments:
         return ""
 
-    keyword_segments = [
-        s for s in useful_segments[:20]
-        if any(keyword.lower() in s["text"].lower() for keyword in get_ai_keywords())
-    ]
-    chosen = keyword_segments[0] if keyword_segments else useful_segments[0]
+    cue_segments = [s for s in useful_segments[:24] if segment_has_key_cue(s)]
+    chosen = cue_segments[0] if cue_segments else useful_segments[0]
     return "今回のポイント: " + shorten_text(chosen["text"], 42)
 
 def build_chapters(segments):
@@ -382,25 +493,24 @@ def build_chapters(segments):
             break
     return chapters
 
-def build_keyword_cues(segments):
-    """重要語が出た箇所をマーカー候補にする"""
+def build_key_point_cues(segments):
+    """発話内容からキーポイントマーカー候補を作る"""
     cues = []
     seen = set()
     for segment in segments:
-        text_lower = segment["text"].lower()
-        for keyword in get_ai_keywords():
-            if keyword.lower() not in text_lower:
-                continue
-            bucket = (keyword, int(segment["start"] // 30))
-            if bucket in seen:
-                continue
-            seen.add(bucket)
-            cues.append({
-                "time": segment["start"],
-                "keyword": keyword,
-                "note": shorten_text(segment["text"], 60),
-            })
-            break
+        if not segment_has_key_cue(segment):
+            continue
+        label = key_point_label(segment)
+        bucket = (label.lower(), int(segment["start"] // 30))
+        if bucket in seen:
+            continue
+        seen.add(bucket)
+        cues.append({
+            "time": segment["start"],
+            "label": label,
+            "terms": extract_terms_from_text(segment["text"]),
+            "note": shorten_text(segment["text"], 60),
+        })
         if len(cues) >= 24:
             break
     return cues
@@ -530,7 +640,7 @@ def build_ai_assist_plan(source_video_path, working_dir):
         "hook_text": "",
         "hook_asset_path": "",
         "chapters": [],
-        "keyword_cues": [],
+        "key_point_cues": [],
         "qc_notes": [],
         "source_duration": 0,
     }
@@ -555,7 +665,7 @@ def build_ai_assist_plan(source_video_path, working_dir):
             "transcript_path": str(transcript_path),
             "hook_text": choose_hook_text(segments),
             "chapters": build_chapters(segments),
-            "keyword_cues": build_keyword_cues(segments),
+            "key_point_cues": build_key_point_cues(segments),
             "qc_notes": build_qc_notes(segments),
             "source_duration": segments[-1]["end"],
         }
@@ -635,8 +745,8 @@ def add_ai_assist_markers(timeline, start_frame, ai_plan, fps, edited_duration_f
     for chapter in ai_plan.get("chapters", []):
         add_marker(float(chapter["time"]), "Blue", "Chapter: " + chapter["title"], "AI chapter draft")
 
-    for cue in ai_plan.get("keyword_cues", []):
-        add_marker(float(cue["time"]), "Yellow", "Keyword: " + cue["keyword"], cue.get("note", ""))
+    for cue in ai_plan.get("key_point_cues", []):
+        add_marker(float(cue["time"]), "Yellow", "Key point: " + cue["label"], cue.get("note", ""))
 
     for note in ai_plan.get("qc_notes", []):
         add_marker(float(note["time"]), "Red", "QC: " + note["type"], note.get("message", ""))

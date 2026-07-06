@@ -23,7 +23,7 @@
 - リトライ機能付きクリップ追加（安定性向上）
 - クロスプラットフォーム対応（Windows/Mac/Linux）
 - AI編集補助（試験機能）
-  - `whisper` CLIが利用できる場合、録画音声を文字起こしして章マーカー・重要語マーカー・QCマーカーの草案を追加
+  - `whisper` CLIが利用できる場合、録画音声を文字起こしして章マーカー・キーポイントマーカー・QCマーカーの草案を追加
   - `ffmpeg` と `Pillow` が利用できる場合、冒頭フックカード動画を自動生成して本編先頭に追加
   - 依存ツールが無い場合や処理に失敗した場合も、従来の自動編集処理は継続
 
@@ -116,7 +116,7 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 - `_ai_assist/ai_edit_plan.json` と `_ai_assist/chapters_draft.txt` を出力
 - DaVinci Resolveのタイムラインに以下のドラフトマーカーを追加
   - Blue: 章マーカー
-  - Yellow: 重要語マーカー
+  - Yellow: キーポイントマーカー
   - Red: QC確認ポイント
   - Green: 冒頭フック
 - `ffmpeg` と `Pillow` が利用できる場合、AIが選んだ冒頭フック文を4秒のカード動画として本編先頭に追加
@@ -145,14 +145,7 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
   ],
   "op_clip_name": "01_EBI_CHAN_OP",
   "whisper_language": "Japanese",
-  "ai_keywords": [
-    "Claude Code",
-    "MCP",
-    "API",
-    "Hooks",
-    "GitHub",
-    "自動化"
-  ]
+  "priority_terms": []
 }
 ```
 
@@ -179,9 +172,11 @@ $env:DAVINCI_ENDING_VIDEO_PATHS = "C:\Users\YOUR_NAME\Videos\Assets\ending.mov"
 ```powershell
 $env:DAVINCI_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 $env:DAVINCI_WHISPER_LANGUAGE = "Japanese"
-$env:DAVINCI_AI_KEYWORDS = "Claude Code,MCP,API,Hooks,GitHub,自動化"
+$env:DAVINCI_PRIORITY_TERMS = "Claude Code,MCP,Hooks"
 $env:DAVINCI_AI_ASSIST = "1"
 ```
+
+`priority_terms` / `DAVINCI_PRIORITY_TERMS` は必須ではありません。基本的には文字起こしから英数字の技術用語、強調フレーズ、章境界を自動抽出します。特定の用語を優先的に拾いたい場合だけ指定してください。
 
 ## 注意事項
 
@@ -226,7 +221,7 @@ $env:DAVINCI_AI_ASSIST = "1"
 - **クロスプラットフォーム対応**: Windows、Mac、Linux自動対応
 - **オブジェクト再取得**: 安定性向上のための自動オブジェクト更新
 - **詳細ログ**: トラブルシューティング用の詳細情報出力
-- **AI編集補助**: whisper文字起こしが可能な環境では、章・重要語・QCマーカーと冒頭フックカードを自動生成
+- **AI編集補助**: whisper文字起こしが可能な環境では、章・キーポイント・QCマーカーと冒頭フックカードを自動生成
 
 ### パフォーマンス
 - 大量クリップ（300+）の処理に対応

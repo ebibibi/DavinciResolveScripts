@@ -10,12 +10,5 @@
   ],
   "op_clip_name": "01_EBI_CHAN_OP",
   "whisper_language": "Japanese",
-  "ai_keywords": [
-    "Claude Code",
-    "MCP",
-    "API",
-    "Hooks",
-    "GitHub",
-    "自動化"
-  ]
+  "priority_terms": []
 }
