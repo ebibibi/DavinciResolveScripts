@@ -140,14 +140,17 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
   "xml_dirs": [
     "C:\\Users\\YOUR_NAME\\Videos\\OBS"
   ],
-  "ending_video_paths": [
-    "C:\\Users\\YOUR_NAME\\Videos\\Assets\\ending.mov"
+  "video_path": [
+    "C:\\Users\\YOUR_NAME\\Videos\\Assets"
   ],
+  "ending_clip_name": "ending.mov",
   "op_clip_name": "01_EBI_CHAN_OP",
   "whisper_language": "Japanese",
   "priority_terms": []
 }
 ```
+
+`working_dirs`、`xml_dirs`、`video_path` は配列で複数指定できます。上から順に存在するフォルダや対象ファイルを探します。
 
 ### 方法2: 環境変数
 
@@ -163,13 +166,20 @@ $env:DAVINCI_WORKING_DIRS = "C:\Users\YOUR_NAME\Videos\OBS"
 $env:DAVINCI_XML_DIRS = "C:\Users\YOUR_NAME\Videos\OBS"
 ```
 
-### 3. エンディング動画のパス
+### 3. 動画素材フォルダ
 ```powershell
-$env:DAVINCI_ENDING_VIDEO_PATHS = "C:\Users\YOUR_NAME\Videos\Assets\ending.mov"
+$env:DAVINCI_VIDEO_PATH = "C:\Users\YOUR_NAME\Videos\Assets"
+```
+
+Windowsで複数フォルダを指定する場合はセミコロン区切りにします。
+
+```powershell
+$env:DAVINCI_VIDEO_PATH = "C:\Users\YOUR_NAME\Videos\Assets;D:\Shared\VideoAssets"
 ```
 
 ### 4. その他の設定
 ```powershell
+$env:DAVINCI_ENDING_CLIP_NAME = "ending.mov"
 $env:DAVINCI_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 $env:DAVINCI_WHISPER_LANGUAGE = "Japanese"
 $env:DAVINCI_PRIORITY_TERMS = "Claude Code,MCP,Hooks"

@@ -63,14 +63,22 @@ if xml_folder_path is None:
 
 print(f"選択されたXMLフォルダ: {xml_folder_path}")
 
-# エンディング動画へのパスを指定
-ending_video_paths = [
-    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
-    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov'
+# 動画素材フォルダとエンディングクリップ名を指定
+video_paths = [
+    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材',
+    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材'
 ]
-print(f"エンディング動画パス候補: {ending_video_paths}")
+ending_clip_name = '03_EBI_CHAN_IN.mov'
+print(f"動画素材フォルダ候補: {video_paths}")
 
-ending_video_path = next((path for path in ending_video_paths if os.path.exists(path)), None)
+ending_video_path = next(
+    (
+        os.path.join(path, ending_clip_name)
+        for path in video_paths
+        if os.path.exists(os.path.join(path, ending_clip_name))
+    ),
+    None
+)
 
 if ending_video_path is None:
     print("いずれのエンディング動画も存在しません。終了します。")
@@ -309,5 +317,4 @@ except Exception as e:
     
     
 print("全ての処理が完了しました。")
-
 

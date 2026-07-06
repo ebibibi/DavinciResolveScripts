@@ -5,9 +5,10 @@
   "xml_dirs": [
     "C:\\Users\\YOUR_NAME\\Videos\\OBS"
   ],
-  "ending_video_paths": [
-    "C:\\Users\\YOUR_NAME\\Videos\\Assets\\ending.mov"
+  "video_path": [
+    "C:\\Users\\YOUR_NAME\\Videos\\Assets"
   ],
+  "ending_clip_name": "ending.mov",
   "op_clip_name": "01_EBI_CHAN_OP",
   "whisper_language": "Japanese",
   "priority_terms": []

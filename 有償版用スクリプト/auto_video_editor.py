@@ -29,6 +29,7 @@ AI_ASSIST_DIR_NAME = "_ai_assist"
 HOOK_CARD_SECONDS = 4
 CHAPTER_INTERVAL_SECONDS = 180
 DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
+DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
 DEFAULT_WHISPER_LANGUAGE = "Japanese"
 KEY_CUE_PHRASES = [
     "重要",
@@ -134,6 +135,39 @@ def configured_value(env_name, config_key, default_value):
 def first_existing_path(paths):
     """候補から最初に存在するパスを返す"""
     return next((path for path in paths if os.path.exists(path)), None)
+
+def find_clip_path(video_paths, clip_name):
+    """素材フォルダ候補から指定クリップ名のファイルを探す"""
+    clip_name = str(clip_name or "").strip().strip('"')
+    if not clip_name:
+        return None
+
+    direct_path = Path(clip_name)
+    if direct_path.exists():
+        return str(direct_path)
+
+    for video_path in video_paths:
+        base_path = Path(str(video_path).strip().strip('"'))
+        if base_path.is_file() and base_path.name == clip_name:
+            return str(base_path)
+        if not base_path.is_dir():
+            continue
+
+        exact_path = base_path / clip_name
+        if exact_path.exists():
+            return str(exact_path)
+
+        patterns = (
+            [f"{clip_name}.*", f"*{clip_name}*"]
+            if not direct_path.suffix
+            else [f"*{clip_name}*"]
+        )
+        for pattern in patterns:
+            for match in sorted(base_path.glob(pattern)):
+                if match.is_file():
+                    return str(match)
+
+    return None
 
 def get_priority_terms():
     """必要に応じて手動で優先する用語。自動抽出の補助としてだけ使う。"""
@@ -923,8 +957,9 @@ def main():
     print(f"✓ XMLタイムラインインポート成功: {xml_timeline.GetName()}")
     
     # エンディング動画をXMLタイムラインに追加
-    ending_video_paths = configured_paths("DAVINCI_ENDING_VIDEO_PATHS", "ending_video_paths")
-    ending_video_path = first_existing_path(ending_video_paths)
+    video_paths = configured_paths("DAVINCI_VIDEO_PATH", "video_path")
+    ending_clip_name = configured_value("DAVINCI_ENDING_CLIP_NAME", "ending_clip_name", DEFAULT_ENDING_CLIP_NAME)
+    ending_video_path = find_clip_path(video_paths, ending_clip_name)
     if ending_video_path:
         print(f"✓ エンディング動画: {ending_video_path}")
         
@@ -951,7 +986,8 @@ def main():
             except Exception as e:
                 print(f"✗ エンディング動画追加エラー: {e}")
     else:
-        print("! エンディング動画が見つかりません（スキップ）")
+        print(f"! エンディング動画が見つかりません（スキップ）: {ending_clip_name}")
+        print("  config.local.json の video_path / ending_clip_name を確認してください")
     
     # mainタイムラインをアクティブにする
     print("mainタイムラインをアクティブにします")
