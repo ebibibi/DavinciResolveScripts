@@ -36,6 +36,7 @@ DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
 DEFAULT_WHISPER_LANGUAGE = "Japanese"
 DEFAULT_WHISPER_DEVICE = "auto"
+DEFAULT_WHISPER_FP16 = "false"
 KEY_CUE_PHRASES = [
     "重要",
     "ポイント",
@@ -521,6 +522,19 @@ def select_whisper_device():
         return "mps"
     return "cpu"
 
+def select_whisper_fp16(whisper_device):
+    """WhisperのFP16利用有無を選ぶ。既定は安定性優先でFalse。"""
+    value = configured_value("DAVINCI_WHISPER_FP16", "whisper_fp16", DEFAULT_WHISPER_FP16)
+    if isinstance(value, bool):
+        return "True" if value else "False"
+
+    normalized = str(value).strip().lower()
+    if normalized == "auto":
+        return "True" if whisper_device == "cuda" else "False"
+    if normalized in ("1", "true", "yes", "on"):
+        return "True"
+    return "False"
+
 def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
     """Whisperが出力したJSONを、名前揺れを許容して探す"""
     exact_path = output_dir / f"{source_video_path.stem}.json"
@@ -559,6 +573,37 @@ def write_whisper_process_logs(output_dir, result):
             errors="replace",
         )
 
+def build_whisper_command(whisper_command, source_video_path, output_dir, whisper_device, whisper_fp16):
+    """Whisper CLIの実行コマンドを組み立てる"""
+    return whisper_command + [
+        str(source_video_path),
+        "--language",
+        configured_value("DAVINCI_WHISPER_LANGUAGE", "whisper_language", DEFAULT_WHISPER_LANGUAGE),
+        "--task",
+        "transcribe",
+        "--device",
+        whisper_device,
+        "--fp16",
+        whisper_fp16,
+        "--output_format",
+        "json",
+        "--output_dir",
+        str(output_dir),
+    ]
+
+def run_whisper_command(command, output_dir):
+    """Whisperを実行し、標準出力・標準エラーを保存する"""
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        write_whisper_process_logs(output_dir, result)
+        return True
+    except subprocess.CalledProcessError as e:
+        write_whisper_process_logs(output_dir, e)
+        print(f"! whisper文字起こしに失敗しました: {e}")
+        if e.stderr:
+            print(e.stderr)
+        return False
+
 def run_whisper_transcription(source_video_path, output_dir):
     """whisper CLIがあれば文字起こしを実行し、JSONパスを返す"""
     whisper_command = resolve_whisper_command()
@@ -574,36 +619,43 @@ def run_whisper_transcription(source_video_path, output_dir):
         return transcript_path
 
     whisper_device = select_whisper_device()
-    command = whisper_command + [
-        str(source_video_path),
-        "--language",
-        configured_value("DAVINCI_WHISPER_LANGUAGE", "whisper_language", DEFAULT_WHISPER_LANGUAGE),
-        "--task",
-        "transcribe",
-        "--device",
+    whisper_fp16 = select_whisper_fp16(whisper_device)
+    command = build_whisper_command(
+        whisper_command,
+        source_video_path,
+        output_dir,
         whisper_device,
-        "--output_format",
-        "json",
-        "--output_dir",
-        str(output_dir),
-    ]
+        whisper_fp16,
+    )
     print("whisper文字起こしを実行中...")
     print(f"Whisper device: {whisper_device}")
+    print(f"Whisper fp16: {whisper_fp16}")
     print("実行コマンド:", " ".join(command))
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        write_whisper_process_logs(output_dir, result)
-    except subprocess.CalledProcessError as e:
-        write_whisper_process_logs(output_dir, e)
-        print(f"! whisper文字起こしに失敗しました: {e}")
-        if e.stderr:
-            print(e.stderr)
+
+    if not run_whisper_command(command, output_dir):
         return None
 
     transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
     if transcript_path:
         print(f"✓ 文字起こしJSON作成: {transcript_path}")
         return transcript_path
+
+    if whisper_fp16 == "True":
+        print("! JSONが見つかりません。FP16を無効化して再実行します。")
+        retry_command = build_whisper_command(
+            whisper_command,
+            source_video_path,
+            output_dir,
+            whisper_device,
+            "False",
+        )
+        print("再実行コマンド:", " ".join(retry_command))
+        if not run_whisper_command(retry_command, output_dir):
+            return None
+        transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
+        if transcript_path:
+            print(f"✓ 文字起こしJSON作成: {transcript_path}")
+            return transcript_path
 
     print("! whisper実行後にJSONが見つかりませんでした。")
     print(f"  診断ログ: {output_dir / 'whisper_stdout.log'} / {output_dir / 'whisper_stderr.log'}")
@@ -697,6 +749,7 @@ def describe_ai_dependencies():
         "script_version": SCRIPT_VERSION,
         "whisper": " ".join(resolve_whisper_command()),
         "whisper_device": select_whisper_device(),
+        "whisper_fp16": select_whisper_fp16(select_whisper_device()),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "pillow": pillow_status,
     }
@@ -743,6 +796,7 @@ def write_ai_assist_files(ai_plan, output_dir):
             f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
         f.write(f"whisper: {dependencies.get('whisper') or 'NOT FOUND'}\n")
         f.write(f"whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}\n")
+        f.write(f"whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}\n")
         f.write(f"torch: {dependencies.get('torch') or 'NOT FOUND'}\n")
         f.write(f"torch_cuda_available: {dependencies.get('torch_cuda_available')}\n")
         f.write(f"torch_cuda_version: {dependencies.get('torch_cuda_version') or ''}\n")
@@ -841,6 +895,7 @@ def build_ai_assist_plan(source_video_path, working_dir):
     print("AI補助の依存ツール状態:")
     print(f"  whisper: {dependencies.get('whisper') or 'NOT FOUND'}")
     print(f"  whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}")
+    print(f"  whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}")
     print(f"  torch: {dependencies.get('torch') or 'NOT FOUND'}")
     print(f"  torch CUDA: {dependencies.get('torch_cuda_available')}")
     if dependencies.get("torch_cuda_device"):

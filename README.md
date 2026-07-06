@@ -117,6 +117,7 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 - `auto-editor` 実行後、最新録画を `whisper` で文字起こし
 - `_ai_assist/ai_edit_plan.json`、`_ai_assist/chapters_draft.txt`、`_ai_assist/ai_assist_status.txt` を出力
 - `whisper_device` が `auto` の場合、PyTorchでCUDAが使えれば `cuda`、Apple SiliconのMPSが使えれば `mps`、それ以外は `cpu` を自動選択
+- GTX 1650などでCUDA実行中にNaNが出るケースを避けるため、既定では `whisper_fp16=false` としてFP32で実行
 - DaVinci Resolveのタイムラインに以下のドラフトマーカーを追加
   - Blue: 章マーカー
   - Yellow: キーポイントマーカー
@@ -152,6 +153,7 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
   "op_clip_name": "01_EBI_CHAN_OP",
   "whisper_language": "Japanese",
   "whisper_device": "auto",
+  "whisper_fp16": false,
   "priority_terms": []
 }
 ```
@@ -189,6 +191,7 @@ $env:DAVINCI_ENDING_CLIP_NAME = "ending.mov"
 $env:DAVINCI_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 $env:DAVINCI_WHISPER_LANGUAGE = "Japanese"
 $env:DAVINCI_WHISPER_DEVICE = "auto"
+$env:DAVINCI_WHISPER_FP16 = "false"
 $env:DAVINCI_PRIORITY_TERMS = "Claude Code,MCP,Hooks"
 $env:DAVINCI_AI_ASSIST = "1"
 ```
@@ -196,6 +199,7 @@ $env:DAVINCI_AI_ASSIST = "1"
 `priority_terms` / `DAVINCI_PRIORITY_TERMS` は必須ではありません。基本的には文字起こしから英数字の技術用語、強調フレーズ、章境界を自動抽出します。特定の用語を優先的に拾いたい場合だけ指定してください。
 
 `whisper_device` / `DAVINCI_WHISPER_DEVICE` は通常 `auto` のままで構いません。GPUを強制したい場合は `cuda`、CPUに固定したい場合は `cpu` を指定できます。
+`whisper_fp16` / `DAVINCI_WHISPER_FP16` は既定で `false` です。GPU使用時にNaNで失敗する場合は `false` のままにしてください。RTX系などで速度優先にしたい場合だけ `true` または `auto` を試してください。
 CUDA版PyTorchのインストール元は `DAVINCI_TORCH_CUDA_INDEX_URL` で変更できます。既定値は `https://download.pytorch.org/whl/cu126` です。
 
 ## 注意事項
