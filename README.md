@@ -126,11 +126,12 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 ## カスタマイズ
 
 有償版では、スクリプトを直接編集せずに `config.local.json` または環境変数でローカル環境を指定できます。
+互換用に `config.json` も読み込みますが、新規作成時は `config.local.json` を推奨します。
 
 ### 方法1: config.local.json（推奨）
 
 `有償版用スクリプト/config.example.json` を `config.local.json` にコピーし、自分の環境に合わせて編集してください。
-`config.local.json` は `.gitignore` 済みなので、GitHubには公開されません。
+`config.local.json` と `config.json` は `.gitignore` 済みなので、GitHubには公開されません。
 
 ```json
 {
@@ -154,7 +155,7 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 
 ### 方法2: 環境変数
 
-環境変数は `config.local.json` より優先されます。複数パスはWindowsではセミコロン区切りで指定します。
+環境変数は `config.local.json` / `config.json` より優先されます。複数パスはWindowsではセミコロン区切りで指定します。
 
 ### 1. 作業ディレクトリ（OBS録画データの保存場所）
 ```powershell
