@@ -113,13 +113,14 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 
 ### 6. AI編集補助（有償版・試験機能）
 - `auto-editor` 実行後、最新録画を `whisper` で文字起こし
-- `_ai_assist/ai_edit_plan.json` と `_ai_assist/chapters_draft.txt` を出力
+- `_ai_assist/ai_edit_plan.json`、`_ai_assist/chapters_draft.txt`、`_ai_assist/ai_assist_status.txt` を出力
 - DaVinci Resolveのタイムラインに以下のドラフトマーカーを追加
   - Blue: 章マーカー
   - Yellow: キーポイントマーカー
   - Red: QC確認ポイント
   - Green: 冒頭フック
 - `ffmpeg` と `Pillow` が利用できる場合、AIが選んだ冒頭フック文を4秒のカード動画として本編先頭に追加
+- `whisper` が見つからない場合や文字起こしに失敗した場合は、タイムラインに `AI Assist skipped` マーカーを追加し、`ai_assist_status.txt` に理由を書き出します
 
 マーカーやフックカードは編集のたたき台です。不要であればDaVinci Resolve上で削除・調整してください。
 

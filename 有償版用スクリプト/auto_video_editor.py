@@ -584,11 +584,40 @@ def build_qc_notes(segments):
             break
     return notes
 
+def describe_ai_dependencies():
+    """AI補助に必要な外部ツールの状態を返す"""
+    try:
+        import PIL
+        pillow_status = getattr(PIL, "__version__", "available")
+    except ImportError:
+        pillow_status = ""
+
+    return {
+        "whisper": shutil.which("whisper") or "",
+        "ffmpeg": shutil.which("ffmpeg") or "",
+        "pillow": pillow_status,
+    }
+
+def empty_ai_plan(reason, dependencies=None):
+    """AI補助が動かなかった理由つきの空プランを返す"""
+    return {
+        "enabled": False,
+        "skip_reason": reason,
+        "dependencies": dependencies or {},
+        "hook_text": "",
+        "hook_asset_path": "",
+        "chapters": [],
+        "key_point_cues": [],
+        "qc_notes": [],
+        "source_duration": 0,
+    }
+
 def write_ai_assist_files(ai_plan, output_dir):
     """後段や手動確認用のファイルを書き出す"""
     output_dir.mkdir(parents=True, exist_ok=True)
     plan_path = output_dir / "ai_edit_plan.json"
     chapters_path = output_dir / "chapters_draft.txt"
+    status_path = output_dir / "ai_assist_status.txt"
 
     with open(plan_path, "w", encoding="utf-8") as f:
         json.dump(ai_plan, f, ensure_ascii=False, indent=2)
@@ -598,8 +627,24 @@ def write_ai_assist_files(ai_plan, output_dir):
             seconds = int(chapter["time"])
             f.write(f"{seconds // 60:02d}:{seconds % 60:02d} {chapter['title']}\n")
 
+    dependencies = ai_plan.get("dependencies", {})
+    with open(status_path, "w", encoding="utf-8") as f:
+        f.write("AI Assist Status\n")
+        f.write("================\n")
+        f.write(f"enabled: {bool(ai_plan.get('enabled'))}\n")
+        if ai_plan.get("skip_reason"):
+            f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
+        f.write(f"whisper: {dependencies.get('whisper') or 'NOT FOUND'}\n")
+        f.write(f"ffmpeg: {dependencies.get('ffmpeg') or 'NOT FOUND'}\n")
+        f.write(f"pillow: {dependencies.get('pillow') or 'NOT FOUND'}\n")
+        f.write(f"hook_asset_path: {ai_plan.get('hook_asset_path') or ''}\n")
+        f.write(f"chapters: {len(ai_plan.get('chapters', []))}\n")
+        f.write(f"key_point_cues: {len(ai_plan.get('key_point_cues', []))}\n")
+        f.write(f"qc_notes: {len(ai_plan.get('qc_notes', []))}\n")
+
     print(f"✓ AI編集プランを書き出しました: {plan_path}")
     print(f"✓ チャプター草案を書き出しました: {chapters_path}")
+    print(f"✓ AI補助ステータスを書き出しました: {status_path}")
 
 def create_hook_card_asset(ai_plan, output_dir):
     """Pillowとffmpegがあれば、冒頭フックカード動画を作る"""
@@ -679,34 +724,42 @@ def create_hook_card_asset(ai_plan, output_dir):
 
 def build_ai_assist_plan(source_video_path, working_dir):
     """文字起こしからDaVinci上に置く補助情報を作る。失敗時は空プランを返す。"""
-    empty_plan = {
-        "enabled": False,
-        "hook_text": "",
-        "hook_asset_path": "",
-        "chapters": [],
-        "key_point_cues": [],
-        "qc_notes": [],
-        "source_duration": 0,
-    }
+    dependencies = describe_ai_dependencies()
+    output_dir = Path(working_dir) / AI_ASSIST_DIR_NAME
+    print("AI補助の依存ツール状態:")
+    print(f"  whisper: {dependencies.get('whisper') or 'NOT FOUND'}")
+    print(f"  ffmpeg: {dependencies.get('ffmpeg') or 'NOT FOUND'}")
+    print(f"  Pillow: {dependencies.get('pillow') or 'NOT FOUND'}")
+
     if not AI_ASSIST_ENABLED:
         print("! DAVINCI_AI_ASSIST=0 のためAI補助をスキップします。")
-        return empty_plan
+        ai_plan = empty_ai_plan("DAVINCI_AI_ASSIST=0", dependencies)
+        write_ai_assist_files(ai_plan, output_dir)
+        return ai_plan
 
-    output_dir = Path(working_dir) / AI_ASSIST_DIR_NAME
     try:
         transcript_path = run_whisper_transcription(Path(source_video_path), output_dir)
         if not transcript_path:
-            return empty_plan
+            ai_plan = empty_ai_plan(
+                "whisper CLI is missing or transcription failed",
+                dependencies,
+            )
+            write_ai_assist_files(ai_plan, output_dir)
+            return ai_plan
 
         segments = load_transcript_segments(transcript_path)
         if not segments:
             print("! 文字起こしセグメントが空です。AI補助をスキップします。")
-            return empty_plan
+            ai_plan = empty_ai_plan("transcript has no usable segments", dependencies)
+            write_ai_assist_files(ai_plan, output_dir)
+            return ai_plan
 
         ai_plan = {
             "enabled": True,
             "source_video": str(source_video_path),
             "transcript_path": str(transcript_path),
+            "skip_reason": "",
+            "dependencies": dependencies,
             "hook_text": choose_hook_text(segments),
             "chapters": build_chapters(segments),
             "key_point_cues": build_key_point_cues(segments),
@@ -719,7 +772,9 @@ def build_ai_assist_plan(source_video_path, working_dir):
         return ai_plan
     except Exception as e:
         print(f"! AI補助処理でエラーが発生しました。従来処理を続行します: {e}")
-        return empty_plan
+        ai_plan = empty_ai_plan(f"AI assist error: {e}", dependencies)
+        write_ai_assist_files(ai_plan, output_dir)
+        return ai_plan
 
 def prepare_hook_clip(media_pool, ai_plan, fps):
     """フックカード動画をメディアプールに読み込み、挿入用clipInfoを返す"""
@@ -757,10 +812,16 @@ def map_source_time_to_edited_frame(source_seconds, source_duration, edited_dura
 
 def add_ai_assist_markers(timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames=0):
     """mainタイムライン上にAI補助マーカーを追加"""
-    if not ai_plan.get("enabled"):
-        return
     if not hasattr(timeline, "AddMarker"):
         print("! このResolve APIではAddMarkerが使えません。マーカー追加をスキップします。")
+        return
+    if not ai_plan.get("enabled"):
+        reason = ai_plan.get("skip_reason") or "AI assist did not run"
+        try:
+            timeline.AddMarker(int(start_frame), "Red", "AI Assist skipped", reason, 1, "")
+            print(f"! AI補助はスキップされました。理由: {reason}")
+        except Exception as e:
+            print(f"! AI補助スキップマーカー追加エラー: {e}")
         return
 
     source_duration = float(ai_plan.get("source_duration") or 0)
