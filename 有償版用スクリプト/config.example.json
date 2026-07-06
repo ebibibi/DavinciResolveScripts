@@ -10,8 +10,18 @@
   ],
   "ending_clip_name": "ending.mov",
   "op_clip_name": "01_EBI_CHAN_OP",
+  "whisper_backend": "local",
   "whisper_language": "Japanese",
   "whisper_device": "auto",
   "whisper_fp16": false,
+  "remote_whisper": {
+    "host": "",
+    "remote_dir": "davinci-whisper-jobs",
+    "command": "whisper",
+    "device": "cuda",
+    "fp16": false,
+    "upload": "audio",
+    "keep_remote_files": false
+  },
   "priority_terms": []
 }

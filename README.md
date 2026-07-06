@@ -118,6 +118,7 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 - `_ai_assist/ai_edit_plan.json`、`_ai_assist/chapters_draft.txt`、`_ai_assist/ai_assist_status.txt` を出力
 - `whisper_device` が `auto` の場合、PyTorchでCUDAが使えれば `cuda`、Apple SiliconのMPSが使えれば `mps`、それ以外は `cpu` を自動選択
 - GTX 1650などでCUDA実行中にNaNが出るケースを避けるため、既定では `whisper_fp16=false` としてFP32で実行
+- `whisper_backend` を `ssh` にすると、SSH接続できるリモートGPUマシンへ音声だけ転送してWhisperを実行し、JSONだけ回収
 - DaVinci Resolveのタイムラインに以下のドラフトマーカーを追加
   - Blue: 章マーカー
   - Yellow: キーポイントマーカー
@@ -151,9 +152,19 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
   ],
   "ending_clip_name": "ending.mov",
   "op_clip_name": "01_EBI_CHAN_OP",
+  "whisper_backend": "local",
   "whisper_language": "Japanese",
   "whisper_device": "auto",
   "whisper_fp16": false,
+  "remote_whisper": {
+    "host": "",
+    "remote_dir": "davinci-whisper-jobs",
+    "command": "whisper",
+    "device": "cuda",
+    "fp16": false,
+    "upload": "audio",
+    "keep_remote_files": false
+  },
   "priority_terms": []
 }
 ```
@@ -189,6 +200,7 @@ $env:DAVINCI_VIDEO_PATH = "C:\Users\YOUR_NAME\Videos\Assets;D:\Shared\VideoAsset
 ```powershell
 $env:DAVINCI_ENDING_CLIP_NAME = "ending.mov"
 $env:DAVINCI_OP_CLIP_NAME = "01_EBI_CHAN_OP"
+$env:DAVINCI_WHISPER_BACKEND = "local"
 $env:DAVINCI_WHISPER_LANGUAGE = "Japanese"
 $env:DAVINCI_WHISPER_DEVICE = "auto"
 $env:DAVINCI_WHISPER_FP16 = "false"
@@ -201,6 +213,27 @@ $env:DAVINCI_AI_ASSIST = "1"
 `whisper_device` / `DAVINCI_WHISPER_DEVICE` は通常 `auto` のままで構いません。GPUを強制したい場合は `cuda`、CPUに固定したい場合は `cpu` を指定できます。
 `whisper_fp16` / `DAVINCI_WHISPER_FP16` は既定で `false` です。GPU使用時にNaNで失敗する場合は `false` のままにしてください。RTX系などで速度優先にしたい場合だけ `true` または `auto` を試してください。
 CUDA版PyTorchのインストール元は `DAVINCI_TORCH_CUDA_INDEX_URL` で変更できます。既定値は `https://download.pytorch.org/whl/cu126` です。
+
+### 5. リモートGPUでWhisperを実行する
+
+SSH接続できるGPUマシンがある場合、`whisper_backend` を `ssh` にするとリモートで文字起こしできます。既定ではローカルで音声だけ抽出して転送するため、動画ファイル全体を送るより軽くなります。
+
+```json
+{
+  "whisper_backend": "ssh",
+  "remote_whisper": {
+    "host": "spark",
+    "remote_dir": "davinci-whisper-jobs",
+    "command": "$HOME/whisper-env/bin/whisper",
+    "device": "cuda",
+    "fp16": false,
+    "upload": "audio",
+    "keep_remote_files": false
+  }
+}
+```
+
+Windows側で `ssh spark` と `scp` が使えること、リモート側で指定した `command` が使えることが前提です。リモート側のホスト名・ユーザー名・鍵パスなどは `.ssh/config` や `config.local.json` / `config.json` にだけ置き、公開リポジトリには入れないでください。
 
 ## 注意事項
 

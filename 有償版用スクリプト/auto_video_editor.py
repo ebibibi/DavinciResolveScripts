@@ -18,6 +18,7 @@ import glob
 import importlib.util
 import json
 import re
+import shlex
 import shutil
 import textwrap
 from datetime import datetime
@@ -37,6 +38,8 @@ DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
 DEFAULT_WHISPER_LANGUAGE = "Japanese"
 DEFAULT_WHISPER_DEVICE = "auto"
 DEFAULT_WHISPER_FP16 = "false"
+DEFAULT_WHISPER_BACKEND = "local"
+DEFAULT_REMOTE_WHISPER_DIR = "davinci-whisper-jobs"
 KEY_CUE_PHRASES = [
     "重要",
     "ポイント",
@@ -147,6 +150,27 @@ def configured_paths(env_name, config_key):
 def configured_value(env_name, config_key, default_value):
     """環境変数またはローカル設定ファイルから単一値を取得"""
     return os.environ.get(env_name) or LOCAL_CONFIG.get(config_key) or default_value
+
+def config_section(config_key):
+    """ローカル設定ファイルのセクションをdictとして取得"""
+    value = LOCAL_CONFIG.get(config_key)
+    return value if isinstance(value, dict) else {}
+
+def configured_section_value(env_name, section_key, value_key, default_value):
+    """環境変数またはローカル設定セクションから単一値を取得"""
+    section = config_section(section_key)
+    return os.environ.get(env_name) or section.get(value_key) or default_value
+
+def configured_bool(value, default_value=False):
+    """設定値をboolへ変換"""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default_value
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return default_value
+    return normalized in ("1", "true", "yes", "on")
 
 def first_existing_path(paths):
     """候補から最初に存在するパスを返す"""
@@ -522,6 +546,11 @@ def select_whisper_device():
         return "mps"
     return "cpu"
 
+def select_whisper_backend():
+    """Whisperの実行場所を選ぶ"""
+    backend = configured_value("DAVINCI_WHISPER_BACKEND", "whisper_backend", DEFAULT_WHISPER_BACKEND)
+    return str(backend).strip().lower()
+
 def select_whisper_fp16(whisper_device):
     """WhisperのFP16利用有無を選ぶ。既定は安定性優先でFalse。"""
     value = configured_value("DAVINCI_WHISPER_FP16", "whisper_fp16", DEFAULT_WHISPER_FP16)
@@ -534,6 +563,29 @@ def select_whisper_fp16(whisper_device):
     if normalized in ("1", "true", "yes", "on"):
         return "True"
     return "False"
+
+def remote_whisper_value(env_name, value_key, default_value):
+    """remote_whisperセクションの値を取得"""
+    return configured_section_value(env_name, "remote_whisper", value_key, default_value)
+
+def sanitize_remote_name(value):
+    """リモート作業名に使える安全な名前へ変換"""
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("._")
+    return sanitized or "whisper_job"
+
+def remote_join(base_path, *parts):
+    """リモートのPOSIXパスを結合する"""
+    path = str(base_path).rstrip("/")
+    for part in parts:
+        path = path + "/" + str(part).strip("/")
+    return path
+
+def remote_shell_path(path):
+    """ssh先シェル用にリモートパスをクォートする"""
+    path = str(path)
+    if path.startswith("~/"):
+        return "$HOME/" + shlex.quote(path[2:])
+    return shlex.quote(path)
 
 def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
     """Whisperが出力したJSONを、名前揺れを許容して探す"""
@@ -604,7 +656,207 @@ def run_whisper_command(command, output_dir):
             print(e.stderr)
         return False
 
-def run_whisper_transcription(source_video_path, output_dir):
+def prepare_remote_whisper_input(source_video_path, output_dir):
+    """リモートWhisperへ送る入力ファイルを準備する"""
+    upload_mode = str(remote_whisper_value(
+        "DAVINCI_REMOTE_WHISPER_UPLOAD",
+        "upload",
+        "audio",
+    )).strip().lower()
+    if upload_mode != "audio":
+        return source_video_path
+
+    ffmpeg_exe = shutil.which("ffmpeg")
+    if not ffmpeg_exe:
+        print("! ffmpegが見つからないため、動画ファイルをそのままリモートへ転送します。")
+        return source_video_path
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = output_dir / f"{source_video_path.stem}.whisper_audio.m4a"
+    if audio_path.exists() and audio_path.stat().st_mtime >= source_video_path.stat().st_mtime:
+        print(f"✓ 既存のリモートWhisper用音声を再利用: {audio_path}")
+        return audio_path
+
+    command = [
+        ffmpeg_exe,
+        "-y",
+        "-i",
+        str(source_video_path),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "64k",
+        str(audio_path),
+    ]
+    print("リモートWhisper用の音声を抽出中...")
+    print("実行コマンド:", " ".join(command))
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True)
+        print(f"✓ 音声抽出完了: {audio_path}")
+        return audio_path
+    except subprocess.CalledProcessError as e:
+        print(f"! 音声抽出に失敗しました。動画ファイルをそのまま転送します: {e}")
+        if e.stderr:
+            print(e.stderr)
+        return source_video_path
+
+def run_remote_command(ssh_command, host, remote_command, stdout_path=None, stderr_path=None, check=True):
+    """SSHでリモートコマンドを実行する"""
+    command = [ssh_command, host, remote_command]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if stdout_path and result.stdout:
+        stdout_path.write_text(result.stdout, encoding="utf-8", errors="replace")
+    if stderr_path and result.stderr:
+        stderr_path.write_text(result.stderr, encoding="utf-8", errors="replace")
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+    return result
+
+def run_remote_whisper_transcription(source_video_path, output_dir):
+    """SSH先のGPUマシンでWhisperを実行し、JSONを回収する"""
+    host = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_HOST", "host", "")).strip()
+    if not host:
+        print("! remote_whisper.host が未設定です。リモートWhisperをスキップします。")
+        return None
+
+    ssh_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_SSH", "ssh", "ssh")).strip()
+    scp_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_SCP", "scp", "scp")).strip()
+    remote_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_COMMAND", "command", "whisper")).strip()
+    remote_base_dir = str(remote_whisper_value(
+        "DAVINCI_REMOTE_WHISPER_DIR",
+        "remote_dir",
+        DEFAULT_REMOTE_WHISPER_DIR,
+    )).strip()
+    remote_device = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_DEVICE", "device", "cuda")).strip()
+    remote_fp16_value = remote_whisper_value("DAVINCI_REMOTE_WHISPER_FP16", "fp16", False)
+    remote_fp16 = select_whisper_fp16(remote_device) if str(remote_fp16_value).lower() == "auto" else (
+        "True" if configured_bool(remote_fp16_value) else "False"
+    )
+    keep_remote_files = configured_bool(remote_whisper_value(
+        "DAVINCI_REMOTE_WHISPER_KEEP_FILES",
+        "keep_remote_files",
+        False,
+    ))
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    source_mtime = source_video_path.stat().st_mtime
+    transcript_path = find_whisper_transcript_path(output_dir, source_video_path, min_mtime=source_mtime)
+    if transcript_path:
+        print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
+        return transcript_path
+
+    upload_file = prepare_remote_whisper_input(source_video_path, output_dir)
+    job_name = sanitize_remote_name(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{source_video_path.stem}")
+    remote_job_dir = remote_join(remote_base_dir, job_name)
+    remote_input_name = sanitize_remote_name(upload_file.stem) + upload_file.suffix.lower()
+    remote_input_path = remote_join(remote_job_dir, remote_input_name)
+
+    stdout_path = output_dir / "whisper_stdout.log"
+    stderr_path = output_dir / "whisper_stderr.log"
+
+    print(f"リモートWhisperを使用します: {host}")
+    print(f"リモート作業ディレクトリ: {remote_job_dir}")
+    try:
+        run_remote_command(
+            ssh_command,
+            host,
+            f"mkdir -p {remote_shell_path(remote_job_dir)}",
+            check=True,
+        )
+
+        print("リモートへWhisper入力ファイルを転送中...")
+        subprocess.run(
+            [scp_command, str(upload_file), f"{host}:{remote_input_path}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        language = configured_value(
+            "DAVINCI_WHISPER_LANGUAGE",
+            "whisper_language",
+            DEFAULT_WHISPER_LANGUAGE,
+        )
+        remote_run_command = (
+            f"cd {remote_shell_path(remote_job_dir)} && "
+            f"{remote_command} {shlex.quote(remote_input_name)} "
+            f"--language {shlex.quote(str(language))} "
+            f"--task transcribe "
+            f"--device {shlex.quote(remote_device)} "
+            f"--fp16 {shlex.quote(remote_fp16)} "
+            f"--output_format json "
+            f"--output_dir ."
+        )
+        print("リモートWhisper文字起こしを実行中...")
+        print("実行コマンド:", remote_run_command)
+        run_remote_command(
+            ssh_command,
+            host,
+            remote_run_command,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            check=True,
+        )
+
+        list_result = run_remote_command(
+            ssh_command,
+            host,
+            f"cd {remote_shell_path(remote_job_dir)} && ls -1 *.json 2>/dev/null || true",
+            check=False,
+        )
+        remote_json_names = [
+            line.strip()
+            for line in list_result.stdout.splitlines()
+            if line.strip() and line.strip() != "ai_edit_plan.json"
+        ]
+        if not remote_json_names:
+            print("! リモートWhisper実行後にJSONが見つかりませんでした。")
+            return None
+
+        for json_name in remote_json_names:
+            subprocess.run(
+                [scp_command, f"{host}:{remote_join(remote_job_dir, json_name)}", str(output_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+        transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
+        if transcript_path:
+            print(f"✓ リモート文字起こしJSON取得: {transcript_path}")
+            return transcript_path
+
+        print("! JSONを取得しましたが、文字起こしJSONとして検出できませんでした。")
+        return None
+    except subprocess.CalledProcessError as e:
+        print(f"! リモートWhisper処理に失敗しました: {e}")
+        if e.stderr:
+            stderr_path.write_text(e.stderr, encoding="utf-8", errors="replace")
+            print(e.stderr)
+        return None
+    finally:
+        if not keep_remote_files:
+            try:
+                run_remote_command(
+                    ssh_command,
+                    host,
+                    f"rm -rf {remote_shell_path(remote_job_dir)}",
+                    check=False,
+                )
+            except Exception:
+                pass
+
+def run_local_whisper_transcription(source_video_path, output_dir):
     """whisper CLIがあれば文字起こしを実行し、JSONパスを返す"""
     whisper_command = resolve_whisper_command()
     if not whisper_command:
@@ -660,6 +912,13 @@ def run_whisper_transcription(source_video_path, output_dir):
     print("! whisper実行後にJSONが見つかりませんでした。")
     print(f"  診断ログ: {output_dir / 'whisper_stdout.log'} / {output_dir / 'whisper_stderr.log'}")
     return None
+
+def run_whisper_transcription(source_video_path, output_dir):
+    """設定されたバックエンドでWhisper文字起こしを実行する"""
+    backend = select_whisper_backend()
+    if backend in ("ssh", "remote"):
+        return run_remote_whisper_transcription(source_video_path, output_dir)
+    return run_local_whisper_transcription(source_video_path, output_dir)
 
 def choose_hook_text(segments):
     """冒頭に置く短い結論カードの文言を決める"""
@@ -744,16 +1003,38 @@ def describe_ai_dependencies():
     except ImportError:
         pillow_status = ""
 
-    torch_status = get_torch_status()
+    whisper_backend = select_whisper_backend()
     status = {
         "script_version": SCRIPT_VERSION,
+        "whisper_backend": whisper_backend,
         "whisper": " ".join(resolve_whisper_command()),
         "whisper_device": select_whisper_device(),
         "whisper_fp16": select_whisper_fp16(select_whisper_device()),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "pillow": pillow_status,
     }
-    status.update(torch_status)
+    if whisper_backend in ("ssh", "remote"):
+        remote_device = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_DEVICE", "device", "cuda"))
+        remote_fp16_value = remote_whisper_value("DAVINCI_REMOTE_WHISPER_FP16", "fp16", False)
+        remote_fp16 = select_whisper_fp16(remote_device) if str(remote_fp16_value).lower() == "auto" else (
+            "True" if configured_bool(remote_fp16_value) else "False"
+        )
+        status["whisper"] = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_COMMAND", "command", "whisper"))
+        status["whisper_device"] = remote_device
+        status["whisper_fp16"] = remote_fp16
+        status["remote_whisper_host"] = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_HOST", "host", ""))
+        status["remote_whisper_dir"] = str(remote_whisper_value(
+            "DAVINCI_REMOTE_WHISPER_DIR",
+            "remote_dir",
+            DEFAULT_REMOTE_WHISPER_DIR,
+        ))
+        status["remote_whisper_upload"] = str(remote_whisper_value(
+            "DAVINCI_REMOTE_WHISPER_UPLOAD",
+            "upload",
+            "audio",
+        ))
+    else:
+        status.update(get_torch_status())
     return status
 
 def empty_ai_plan(reason, dependencies=None):
@@ -794,6 +1075,11 @@ def write_ai_assist_files(ai_plan, output_dir):
         f.write(f"enabled: {bool(ai_plan.get('enabled'))}\n")
         if ai_plan.get("skip_reason"):
             f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
+        f.write(f"whisper_backend: {dependencies.get('whisper_backend') or 'local'}\n")
+        if dependencies.get("remote_whisper_host"):
+            f.write(f"remote_whisper_host: {dependencies.get('remote_whisper_host')}\n")
+            f.write(f"remote_whisper_dir: {dependencies.get('remote_whisper_dir') or ''}\n")
+            f.write(f"remote_whisper_upload: {dependencies.get('remote_whisper_upload') or ''}\n")
         f.write(f"whisper: {dependencies.get('whisper') or 'NOT FOUND'}\n")
         f.write(f"whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}\n")
         f.write(f"whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}\n")
@@ -893,6 +1179,10 @@ def build_ai_assist_plan(source_video_path, working_dir):
     dependencies = describe_ai_dependencies()
     output_dir = Path(working_dir) / AI_ASSIST_DIR_NAME
     print("AI補助の依存ツール状態:")
+    print(f"  whisper_backend: {dependencies.get('whisper_backend') or 'local'}")
+    if dependencies.get("remote_whisper_host"):
+        print(f"  remote_whisper_host: {dependencies.get('remote_whisper_host')}")
+        print(f"  remote_whisper_upload: {dependencies.get('remote_whisper_upload')}")
     print(f"  whisper: {dependencies.get('whisper') or 'NOT FOUND'}")
     print(f"  whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}")
     print(f"  whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}")
