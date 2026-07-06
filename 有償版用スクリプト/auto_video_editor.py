@@ -23,7 +23,10 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
+SCRIPT_VERSION = "2026-07-06-gpu-whisper-v2"
+
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
+print(f"Script version: {SCRIPT_VERSION}")
 
 AI_ASSIST_ENABLED = os.environ.get("DAVINCI_AI_ASSIST", "1").lower() not in ("0", "false", "no")
 AI_ASSIST_DIR_NAME = "_ai_assist"
@@ -518,6 +521,44 @@ def select_whisper_device():
         return "mps"
     return "cpu"
 
+def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
+    """Whisperが出力したJSONを、名前揺れを許容して探す"""
+    exact_path = output_dir / f"{source_video_path.stem}.json"
+    if exact_path.exists() and (min_mtime is None or exact_path.stat().st_mtime >= min_mtime):
+        return exact_path
+
+    ignored_names = {"ai_edit_plan.json"}
+    json_files = [
+        path
+        for path in output_dir.glob("*.json")
+        if path.name not in ignored_names
+        and (min_mtime is None or path.stat().st_mtime >= min_mtime)
+    ]
+    if not json_files:
+        return None
+
+    source_stem = source_video_path.stem.lower()
+    matching_files = [path for path in json_files if source_stem in path.stem.lower()]
+    candidates = matching_files or json_files
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+def write_whisper_process_logs(output_dir, result):
+    """Whisper実行時の標準出力・標準エラーを診断用に保存する"""
+    stdout_text = getattr(result, "stdout", "") or ""
+    stderr_text = getattr(result, "stderr", "") or ""
+    if stdout_text:
+        (output_dir / "whisper_stdout.log").write_text(
+            stdout_text,
+            encoding="utf-8",
+            errors="replace",
+        )
+    if stderr_text:
+        (output_dir / "whisper_stderr.log").write_text(
+            stderr_text,
+            encoding="utf-8",
+            errors="replace",
+        )
+
 def run_whisper_transcription(source_video_path, output_dir):
     """whisper CLIがあれば文字起こしを実行し、JSONパスを返す"""
     whisper_command = resolve_whisper_command()
@@ -526,8 +567,9 @@ def run_whisper_transcription(source_video_path, output_dir):
         return None
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    transcript_path = output_dir / f"{source_video_path.stem}.json"
-    if transcript_path.exists() and transcript_path.stat().st_mtime >= source_video_path.stat().st_mtime:
+    source_mtime = source_video_path.stat().st_mtime
+    transcript_path = find_whisper_transcript_path(output_dir, source_video_path, min_mtime=source_mtime)
+    if transcript_path:
         print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
         return transcript_path
 
@@ -549,18 +591,22 @@ def run_whisper_transcription(source_video_path, output_dir):
     print(f"Whisper device: {whisper_device}")
     print("実行コマンド:", " ".join(command))
     try:
-        subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        write_whisper_process_logs(output_dir, result)
     except subprocess.CalledProcessError as e:
+        write_whisper_process_logs(output_dir, e)
         print(f"! whisper文字起こしに失敗しました: {e}")
         if e.stderr:
             print(e.stderr)
         return None
 
-    if transcript_path.exists():
+    transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
+    if transcript_path:
         print(f"✓ 文字起こしJSON作成: {transcript_path}")
         return transcript_path
 
     print("! whisper実行後にJSONが見つかりませんでした。")
+    print(f"  診断ログ: {output_dir / 'whisper_stdout.log'} / {output_dir / 'whisper_stderr.log'}")
     return None
 
 def choose_hook_text(segments):
@@ -648,6 +694,7 @@ def describe_ai_dependencies():
 
     torch_status = get_torch_status()
     status = {
+        "script_version": SCRIPT_VERSION,
         "whisper": " ".join(resolve_whisper_command()),
         "whisper_device": select_whisper_device(),
         "ffmpeg": shutil.which("ffmpeg") or "",
@@ -660,6 +707,7 @@ def empty_ai_plan(reason, dependencies=None):
     """AI補助が動かなかった理由つきの空プランを返す"""
     return {
         "enabled": False,
+        "script_version": SCRIPT_VERSION,
         "skip_reason": reason,
         "dependencies": dependencies or {},
         "hook_text": "",
@@ -689,6 +737,7 @@ def write_ai_assist_files(ai_plan, output_dir):
     with open(status_path, "w", encoding="utf-8") as f:
         f.write("AI Assist Status\n")
         f.write("================\n")
+        f.write(f"script_version: {ai_plan.get('script_version') or SCRIPT_VERSION}\n")
         f.write(f"enabled: {bool(ai_plan.get('enabled'))}\n")
         if ai_plan.get("skip_reason"):
             f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
@@ -824,6 +873,7 @@ def build_ai_assist_plan(source_video_path, working_dir):
 
         ai_plan = {
             "enabled": True,
+            "script_version": SCRIPT_VERSION,
             "source_video": str(source_video_path),
             "transcript_path": str(transcript_path),
             "skip_reason": "",
