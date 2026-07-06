@@ -90,14 +90,24 @@ TECH_SUFFIXES = [
     "プロジェクト",
     "テンプレート",
 ]
+LOCAL_CONFIG_FILENAMES = ("config.local.json", "config.json")
 
 def load_local_config():
     """git管理外のローカル設定を読み込む"""
     config_path = os.environ.get("DAVINCI_CONFIG")
+    if config_path:
+        config_candidates = [config_path]
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_candidates = [
+            os.path.join(script_dir, filename)
+            for filename in LOCAL_CONFIG_FILENAMES
+        ]
+
+    config_path = next((path for path in config_candidates if os.path.exists(path)), None)
     if not config_path:
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.local.json")
-    if not os.path.exists(config_path):
         return {}
+
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -115,7 +125,7 @@ def split_env_values(name):
     return [item.strip().strip('"') for item in value.split(os.pathsep) if item.strip()]
 
 def config_list(key):
-    """config.local.jsonの値をリストとして取得"""
+    """ローカル設定ファイルの値をリストとして取得"""
     value = LOCAL_CONFIG.get(key)
     if isinstance(value, list):
         return [str(item) for item in value if str(item).strip()]
@@ -124,12 +134,12 @@ def config_list(key):
     return []
 
 def configured_paths(env_name, config_key):
-    """環境変数またはconfig.local.jsonからパス候補を取得"""
+    """環境変数またはローカル設定ファイルからパス候補を取得"""
     values = split_env_values(env_name)
     return values or config_list(config_key)
 
 def configured_value(env_name, config_key, default_value):
-    """環境変数またはconfig.local.jsonから単一値を取得"""
+    """環境変数またはローカル設定ファイルから単一値を取得"""
     return os.environ.get(env_name) or LOCAL_CONFIG.get(config_key) or default_value
 
 def first_existing_path(paths):
@@ -915,7 +925,7 @@ def main():
     working_dir = first_existing_path(configured_paths("DAVINCI_WORKING_DIRS", "working_dirs"))
     if not working_dir:
         print("✗ OBS録画フォルダが見つかりません")
-        print("  環境変数 DAVINCI_WORKING_DIRS に録画フォルダを指定してください")
+        print("  config.local.json / config.json の working_dirs、または環境変数 DAVINCI_WORKING_DIRS を確認してください")
         sys.exit(1)
     print(f"✓ OBS録画フォルダ: {working_dir}")
     source_video_path = run_auto_editor(working_dir)
@@ -931,6 +941,7 @@ def main():
     xml_folder_path = next((path for path in xml_folder_paths if os.path.exists(path)), None)
     if not xml_folder_path:
         print("✗ XMLフォルダが見つかりません")
+        print("  config.local.json / config.json の xml_dirs、または環境変数 DAVINCI_XML_DIRS を確認してください")
         sys.exit(1)
     
     print(f"✓ XMLフォルダ: {xml_folder_path}")
@@ -987,7 +998,7 @@ def main():
                 print(f"✗ エンディング動画追加エラー: {e}")
     else:
         print(f"! エンディング動画が見つかりません（スキップ）: {ending_clip_name}")
-        print("  config.local.json の video_path / ending_clip_name を確認してください")
+        print("  config.local.json / config.json の video_path / ending_clip_name を確認してください")
     
     # mainタイムラインをアクティブにする
     print("mainタイムラインをアクティブにします")
