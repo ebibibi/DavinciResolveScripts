@@ -16,6 +16,9 @@
   "whisper_fp16": false,
   "remote_whisper": {
     "host": "",
+    "identity_file": "",
+    "ssh_args": [],
+    "scp_args": [],
     "remote_dir": "davinci-whisper-jobs",
     "command": "whisper",
     "device": "cuda",

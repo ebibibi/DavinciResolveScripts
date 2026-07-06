@@ -161,6 +161,18 @@ def configured_section_value(env_name, section_key, value_key, default_value):
     section = config_section(section_key)
     return os.environ.get(env_name) or section.get(value_key) or default_value
 
+def configured_section_list(env_name, section_key, value_key):
+    """環境変数またはローカル設定セクションから引数リストを取得"""
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return shlex.split(env_value)
+    value = config_section(section_key).get(value_key)
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return shlex.split(value)
+    return []
+
 def configured_bool(value, default_value=False):
     """設定値をboolへ変換"""
     if isinstance(value, bool):
@@ -568,6 +580,10 @@ def remote_whisper_value(env_name, value_key, default_value):
     """remote_whisperセクションの値を取得"""
     return configured_section_value(env_name, "remote_whisper", value_key, default_value)
 
+def remote_whisper_list(env_name, value_key):
+    """remote_whisperセクションのリスト値を取得"""
+    return configured_section_list(env_name, "remote_whisper", value_key)
+
 def sanitize_remote_name(value):
     """リモート作業名に使える安全な名前へ変換"""
     sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("._")
@@ -586,6 +602,24 @@ def remote_shell_path(path):
     if path.startswith("~/"):
         return "$HOME/" + shlex.quote(path[2:])
     return shlex.quote(path)
+
+def build_remote_client_command(kind):
+    """ssh/scpの実行コマンドと共通オプションを組み立てる"""
+    if kind == "scp":
+        command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_SCP", "scp", "scp")).strip()
+        args = remote_whisper_list("DAVINCI_REMOTE_WHISPER_SCP_ARGS", "scp_args")
+    else:
+        command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_SSH", "ssh", "ssh")).strip()
+        args = remote_whisper_list("DAVINCI_REMOTE_WHISPER_SSH_ARGS", "ssh_args")
+
+    identity_file = str(remote_whisper_value(
+        "DAVINCI_REMOTE_WHISPER_IDENTITY_FILE",
+        "identity_file",
+        "",
+    )).strip()
+    if identity_file:
+        args = ["-i", identity_file] + args
+    return [command] + args
 
 def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
     """Whisperが出力したJSONを、名前揺れを許容して探す"""
@@ -707,7 +741,8 @@ def prepare_remote_whisper_input(source_video_path, output_dir):
 
 def run_remote_command(ssh_command, host, remote_command, stdout_path=None, stderr_path=None, check=True):
     """SSHでリモートコマンドを実行する"""
-    command = [ssh_command, host, remote_command]
+    base_command = [ssh_command] if isinstance(ssh_command, str) else list(ssh_command)
+    command = base_command + [host, remote_command]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if stdout_path and result.stdout:
         stdout_path.write_text(result.stdout, encoding="utf-8", errors="replace")
@@ -729,8 +764,8 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
         print("! remote_whisper.host が未設定です。リモートWhisperをスキップします。")
         return None
 
-    ssh_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_SSH", "ssh", "ssh")).strip()
-    scp_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_SCP", "scp", "scp")).strip()
+    ssh_command = build_remote_client_command("ssh")
+    scp_command = build_remote_client_command("scp")
     remote_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_COMMAND", "command", "whisper")).strip()
     remote_base_dir = str(remote_whisper_value(
         "DAVINCI_REMOTE_WHISPER_DIR",
@@ -776,7 +811,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
 
         print("リモートへWhisper入力ファイルを転送中...")
         subprocess.run(
-            [scp_command, str(upload_file), f"{host}:{remote_input_path}"],
+            scp_command + [str(upload_file), f"{host}:{remote_input_path}"],
             capture_output=True,
             text=True,
             check=True,
@@ -825,7 +860,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
 
         for json_name in remote_json_names:
             subprocess.run(
-                [scp_command, f"{host}:{remote_join(remote_job_dir, json_name)}", str(output_dir)],
+                scp_command + [f"{host}:{remote_join(remote_job_dir, json_name)}", str(output_dir)],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -1033,6 +1068,11 @@ def describe_ai_dependencies():
             "upload",
             "audio",
         ))
+        status["remote_whisper_identity_configured"] = bool(str(remote_whisper_value(
+            "DAVINCI_REMOTE_WHISPER_IDENTITY_FILE",
+            "identity_file",
+            "",
+        )).strip())
     else:
         status.update(get_torch_status())
     return status
@@ -1080,6 +1120,10 @@ def write_ai_assist_files(ai_plan, output_dir):
             f.write(f"remote_whisper_host: {dependencies.get('remote_whisper_host')}\n")
             f.write(f"remote_whisper_dir: {dependencies.get('remote_whisper_dir') or ''}\n")
             f.write(f"remote_whisper_upload: {dependencies.get('remote_whisper_upload') or ''}\n")
+            f.write(
+                "remote_whisper_identity_configured: "
+                f"{dependencies.get('remote_whisper_identity_configured')}\n"
+            )
         f.write(f"whisper: {dependencies.get('whisper') or 'NOT FOUND'}\n")
         f.write(f"whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}\n")
         f.write(f"whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}\n")
@@ -1183,6 +1227,10 @@ def build_ai_assist_plan(source_video_path, working_dir):
     if dependencies.get("remote_whisper_host"):
         print(f"  remote_whisper_host: {dependencies.get('remote_whisper_host')}")
         print(f"  remote_whisper_upload: {dependencies.get('remote_whisper_upload')}")
+        print(
+            "  remote_whisper_identity_configured: "
+            f"{dependencies.get('remote_whisper_identity_configured')}"
+        )
     print(f"  whisper: {dependencies.get('whisper') or 'NOT FOUND'}")
     print(f"  whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}")
     print(f"  whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}")
