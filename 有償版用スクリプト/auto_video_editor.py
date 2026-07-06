@@ -15,6 +15,7 @@ import time
 import subprocess
 import platform
 import glob
+import importlib.util
 import json
 import re
 import shutil
@@ -467,11 +468,20 @@ def load_transcript_segments(transcript_path):
         segments.append({"start": start, "end": end, "text": text})
     return segments
 
+def resolve_whisper_command():
+    """whisper CLIまたはPythonモジュール実行のコマンドを返す"""
+    whisper_exe = shutil.which("whisper")
+    if whisper_exe:
+        return [whisper_exe]
+    if importlib.util.find_spec("whisper.__main__"):
+        return [sys.executable, "-m", "whisper"]
+    return []
+
 def run_whisper_transcription(source_video_path, output_dir):
     """whisper CLIがあれば文字起こしを実行し、JSONパスを返す"""
-    whisper_exe = shutil.which("whisper")
-    if not whisper_exe:
-        print("! whisper CLIが見つかりません。AI補助をスキップします。")
+    whisper_command = resolve_whisper_command()
+    if not whisper_command:
+        print("! whisperが見つかりません。AI補助をスキップします。")
         return None
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -480,8 +490,7 @@ def run_whisper_transcription(source_video_path, output_dir):
         print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
         return transcript_path
 
-    command = [
-        whisper_exe,
+    command = whisper_command + [
         str(source_video_path),
         "--language",
         configured_value("DAVINCI_WHISPER_LANGUAGE", "whisper_language", DEFAULT_WHISPER_LANGUAGE),
@@ -593,7 +602,7 @@ def describe_ai_dependencies():
         pillow_status = ""
 
     return {
-        "whisper": shutil.which("whisper") or "",
+        "whisper": " ".join(resolve_whisper_command()),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "pillow": pillow_status,
     }
