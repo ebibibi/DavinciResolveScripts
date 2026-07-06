@@ -19,6 +19,11 @@ function Test-PythonModule {
     return $LASTEXITCODE -eq 0
 }
 
+function Test-TorchCudaAvailable {
+    python -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)" *> $null
+    return $LASTEXITCODE -eq 0
+}
+
 function Update-CurrentPath {
     $MachinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
     $UserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -28,6 +33,7 @@ function Update-CurrentPath {
 function Install-AiAssistToolsIfRequested {
     $MissingTools = @()
     $MissingPipPackages = @()
+    $InstallCudaTorch = $false
 
     $WhisperAvailable = (Test-CommandAvailable "whisper") -or (Test-PythonModule "whisper")
     if (-not $WhisperAvailable) {
@@ -42,6 +48,11 @@ function Install-AiAssistToolsIfRequested {
 
     if (-not (Test-CommandAvailable "ffmpeg")) {
         $MissingTools += "ffmpeg"
+    }
+
+    if ((Test-CommandAvailable "nvidia-smi") -and -not (Test-TorchCudaAvailable)) {
+        $MissingTools += "PyTorch CUDA"
+        $InstallCudaTorch = $true
     }
 
     if ($MissingTools.Count -eq 0) {
@@ -60,6 +71,15 @@ function Install-AiAssistToolsIfRequested {
     if ($MissingPipPackages.Count -gt 0) {
         Write-Host "Installing Python packages: $($MissingPipPackages -join ', ')"
         & python -m pip install --upgrade @MissingPipPackages
+    }
+
+    if ($InstallCudaTorch) {
+        $TorchCudaIndexUrl = $env:DAVINCI_TORCH_CUDA_INDEX_URL
+        if ([string]::IsNullOrWhiteSpace($TorchCudaIndexUrl)) {
+            $TorchCudaIndexUrl = "https://download.pytorch.org/whl/cu126"
+        }
+        Write-Host "Installing CUDA-enabled PyTorch from $TorchCudaIndexUrl ..."
+        & python -m pip install --upgrade torch torchvision torchaudio --index-url $TorchCudaIndexUrl
     }
 
     if (-not (Test-CommandAvailable "ffmpeg")) {

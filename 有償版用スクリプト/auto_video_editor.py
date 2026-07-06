@@ -32,6 +32,7 @@ CHAPTER_INTERVAL_SECONDS = 180
 DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
 DEFAULT_WHISPER_LANGUAGE = "Japanese"
+DEFAULT_WHISPER_DEVICE = "auto"
 KEY_CUE_PHRASES = [
     "重要",
     "ポイント",
@@ -477,6 +478,46 @@ def resolve_whisper_command():
         return [sys.executable, "-m", "whisper"]
     return []
 
+def get_torch_status():
+    """PyTorchとGPU利用可否の状態を返す"""
+    status = {
+        "torch": "",
+        "torch_cuda_available": False,
+        "torch_cuda_version": "",
+        "torch_cuda_device": "",
+        "torch_mps_available": False,
+    }
+    try:
+        import torch
+        status["torch"] = getattr(torch, "__version__", "available")
+        status["torch_cuda_available"] = bool(torch.cuda.is_available())
+        status["torch_cuda_version"] = getattr(torch.version, "cuda", "") or ""
+        if status["torch_cuda_available"]:
+            status["torch_cuda_device"] = torch.cuda.get_device_name(0)
+        mps_backend = getattr(getattr(torch, "backends", None), "mps", None)
+        if mps_backend is not None:
+            status["torch_mps_available"] = bool(mps_backend.is_available())
+    except Exception:
+        pass
+    return status
+
+def select_whisper_device():
+    """Whisperで使うデバイスを選ぶ"""
+    requested = str(configured_value(
+        "DAVINCI_WHISPER_DEVICE",
+        "whisper_device",
+        DEFAULT_WHISPER_DEVICE,
+    )).strip().lower()
+    if requested and requested != "auto":
+        return requested
+
+    torch_status = get_torch_status()
+    if torch_status["torch_cuda_available"]:
+        return "cuda"
+    if torch_status["torch_mps_available"]:
+        return "mps"
+    return "cpu"
+
 def run_whisper_transcription(source_video_path, output_dir):
     """whisper CLIがあれば文字起こしを実行し、JSONパスを返す"""
     whisper_command = resolve_whisper_command()
@@ -490,18 +531,22 @@ def run_whisper_transcription(source_video_path, output_dir):
         print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
         return transcript_path
 
+    whisper_device = select_whisper_device()
     command = whisper_command + [
         str(source_video_path),
         "--language",
         configured_value("DAVINCI_WHISPER_LANGUAGE", "whisper_language", DEFAULT_WHISPER_LANGUAGE),
         "--task",
         "transcribe",
+        "--device",
+        whisper_device,
         "--output_format",
         "json",
         "--output_dir",
         str(output_dir),
     ]
     print("whisper文字起こしを実行中...")
+    print(f"Whisper device: {whisper_device}")
     print("実行コマンド:", " ".join(command))
     try:
         subprocess.run(command, capture_output=True, text=True, check=True)
@@ -601,11 +646,15 @@ def describe_ai_dependencies():
     except ImportError:
         pillow_status = ""
 
-    return {
+    torch_status = get_torch_status()
+    status = {
         "whisper": " ".join(resolve_whisper_command()),
+        "whisper_device": select_whisper_device(),
         "ffmpeg": shutil.which("ffmpeg") or "",
         "pillow": pillow_status,
     }
+    status.update(torch_status)
+    return status
 
 def empty_ai_plan(reason, dependencies=None):
     """AI補助が動かなかった理由つきの空プランを返す"""
@@ -644,6 +693,11 @@ def write_ai_assist_files(ai_plan, output_dir):
         if ai_plan.get("skip_reason"):
             f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
         f.write(f"whisper: {dependencies.get('whisper') or 'NOT FOUND'}\n")
+        f.write(f"whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}\n")
+        f.write(f"torch: {dependencies.get('torch') or 'NOT FOUND'}\n")
+        f.write(f"torch_cuda_available: {dependencies.get('torch_cuda_available')}\n")
+        f.write(f"torch_cuda_version: {dependencies.get('torch_cuda_version') or ''}\n")
+        f.write(f"torch_cuda_device: {dependencies.get('torch_cuda_device') or ''}\n")
         f.write(f"ffmpeg: {dependencies.get('ffmpeg') or 'NOT FOUND'}\n")
         f.write(f"pillow: {dependencies.get('pillow') or 'NOT FOUND'}\n")
         f.write(f"hook_asset_path: {ai_plan.get('hook_asset_path') or ''}\n")
@@ -737,6 +791,11 @@ def build_ai_assist_plan(source_video_path, working_dir):
     output_dir = Path(working_dir) / AI_ASSIST_DIR_NAME
     print("AI補助の依存ツール状態:")
     print(f"  whisper: {dependencies.get('whisper') or 'NOT FOUND'}")
+    print(f"  whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}")
+    print(f"  torch: {dependencies.get('torch') or 'NOT FOUND'}")
+    print(f"  torch CUDA: {dependencies.get('torch_cuda_available')}")
+    if dependencies.get("torch_cuda_device"):
+        print(f"  torch CUDA device: {dependencies.get('torch_cuda_device')}")
     print(f"  ffmpeg: {dependencies.get('ffmpeg') or 'NOT FOUND'}")
     print(f"  Pillow: {dependencies.get('pillow') or 'NOT FOUND'}")
 

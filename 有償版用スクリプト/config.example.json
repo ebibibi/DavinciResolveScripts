@@ -11,5 +11,6 @@
   "ending_clip_name": "ending.mov",
   "op_clip_name": "01_EBI_CHAN_OP",
   "whisper_language": "Japanese",
+  "whisper_device": "auto",
   "priority_terms": []
 }
