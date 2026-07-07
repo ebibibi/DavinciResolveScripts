@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-07-subprocess-utf8-v1"
+SCRIPT_VERSION = "2026-07-07-spark-whisper-speed-v1"
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 print(f"Script version: {SCRIPT_VERSION}")
@@ -40,6 +40,11 @@ DEFAULT_WHISPER_DEVICE = "auto"
 DEFAULT_WHISPER_FP16 = "false"
 DEFAULT_WHISPER_BACKEND = "local"
 DEFAULT_REMOTE_WHISPER_DIR = "davinci-whisper-jobs"
+DEFAULT_REMOTE_WHISPER_PROFILE = "speed"
+DEFAULT_REMOTE_WHISPER_MODEL = "turbo"
+DEFAULT_REMOTE_WHISPER_BEAM_SIZE = 1
+DEFAULT_REMOTE_WHISPER_BEST_OF = 1
+DEFAULT_REMOTE_WHISPER_VERBOSE = False
 KEY_CUE_PHRASES = [
     "重要",
     "ポイント",
@@ -147,9 +152,23 @@ def configured_paths(env_name, config_key):
     values = split_env_values(env_name)
     return values or config_list(config_key)
 
+def has_config_value(value):
+    """Falseや0は有効値として扱い、空文字/Noneだけ未設定にする"""
+    if value is None:
+        return False
+    if isinstance(value, str) and not value.strip():
+        return False
+    return True
+
 def configured_value(env_name, config_key, default_value):
     """環境変数またはローカル設定ファイルから単一値を取得"""
-    return os.environ.get(env_name) or LOCAL_CONFIG.get(config_key) or default_value
+    env_value = os.environ.get(env_name)
+    if has_config_value(env_value):
+        return env_value
+    config_value = LOCAL_CONFIG.get(config_key)
+    if has_config_value(config_value):
+        return config_value
+    return default_value
 
 def config_section(config_key):
     """ローカル設定ファイルのセクションをdictとして取得"""
@@ -158,8 +177,14 @@ def config_section(config_key):
 
 def configured_section_value(env_name, section_key, value_key, default_value):
     """環境変数またはローカル設定セクションから単一値を取得"""
+    env_value = os.environ.get(env_name)
+    if has_config_value(env_value):
+        return env_value
     section = config_section(section_key)
-    return os.environ.get(env_name) or section.get(value_key) or default_value
+    section_value = section.get(value_key)
+    if has_config_value(section_value):
+        return section_value
+    return default_value
 
 def configured_section_list(env_name, section_key, value_key):
     """環境変数またはローカル設定セクションから引数リストを取得"""
@@ -584,6 +609,33 @@ def remote_whisper_list(env_name, value_key):
     """remote_whisperセクションのリスト値を取得"""
     return configured_section_list(env_name, "remote_whisper", value_key)
 
+def remote_whisper_profile():
+    """リモートWhisperの実行プロファイルを取得"""
+    return str(remote_whisper_value(
+        "DAVINCI_REMOTE_WHISPER_PROFILE",
+        "profile",
+        DEFAULT_REMOTE_WHISPER_PROFILE,
+    )).strip().lower()
+
+def is_remote_speed_profile(profile):
+    """GPU性能優先のプロファイルかどうか"""
+    return profile in ("speed", "spark", "performance", "fast")
+
+def select_remote_whisper_fp16(remote_device, profile):
+    """リモートWhisperのFP16設定。速度プロファイルではCUDAのFP16を優先する。"""
+    if is_remote_speed_profile(profile) and str(remote_device).strip().lower().startswith("cuda"):
+        return "True"
+
+    value = remote_whisper_value("DAVINCI_REMOTE_WHISPER_FP16", "fp16", "auto")
+    normalized = str(value).strip().lower()
+    if normalized == "auto":
+        return "True" if str(remote_device).strip().lower().startswith(("cuda", "mps")) else "False"
+    return "True" if configured_bool(value) else "False"
+
+def remote_whisper_option(env_name, value_key, default_value):
+    """リモートWhisperのCLIオプション値を文字列として取得"""
+    return str(remote_whisper_value(env_name, value_key, default_value)).strip()
+
 def sanitize_remote_name(value):
     """リモート作業名に使える安全な名前へ変換"""
     sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("._")
@@ -796,11 +848,30 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
         "remote_dir",
         DEFAULT_REMOTE_WHISPER_DIR,
     )).strip()
+    profile = remote_whisper_profile()
     remote_device = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_DEVICE", "device", "cuda")).strip()
-    remote_fp16_value = remote_whisper_value("DAVINCI_REMOTE_WHISPER_FP16", "fp16", False)
-    remote_fp16 = select_whisper_fp16(remote_device) if str(remote_fp16_value).lower() == "auto" else (
-        "True" if configured_bool(remote_fp16_value) else "False"
+    remote_fp16 = select_remote_whisper_fp16(remote_device, profile)
+    remote_model = remote_whisper_option(
+        "DAVINCI_REMOTE_WHISPER_MODEL",
+        "model",
+        DEFAULT_REMOTE_WHISPER_MODEL,
     )
+    remote_beam_size = remote_whisper_option(
+        "DAVINCI_REMOTE_WHISPER_BEAM_SIZE",
+        "beam_size",
+        DEFAULT_REMOTE_WHISPER_BEAM_SIZE,
+    )
+    remote_best_of = remote_whisper_option(
+        "DAVINCI_REMOTE_WHISPER_BEST_OF",
+        "best_of",
+        DEFAULT_REMOTE_WHISPER_BEST_OF,
+    )
+    remote_verbose = "True" if configured_bool(remote_whisper_value(
+        "DAVINCI_REMOTE_WHISPER_VERBOSE",
+        "verbose",
+        DEFAULT_REMOTE_WHISPER_VERBOSE,
+    )) else "False"
+    remote_extra_args = remote_whisper_list("DAVINCI_REMOTE_WHISPER_EXTRA_ARGS", "extra_args")
     keep_remote_files = configured_bool(remote_whisper_value(
         "DAVINCI_REMOTE_WHISPER_KEEP_FILES",
         "keep_remote_files",
@@ -843,15 +914,23 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
             "whisper_language",
             DEFAULT_WHISPER_LANGUAGE,
         )
+        remote_args = [
+            remote_input_name,
+            "--model", remote_model,
+            "--language", str(language),
+            "--task", "transcribe",
+            "--device", remote_device,
+            "--fp16", remote_fp16,
+            "--beam_size", remote_beam_size,
+            "--best_of", remote_best_of,
+            "--verbose", remote_verbose,
+            "--output_format", "json",
+            "--output_dir", ".",
+        ] + remote_extra_args
         remote_run_command = (
             f"cd {remote_shell_path(remote_job_dir)} && "
-            f"{remote_command} {shlex.quote(remote_input_name)} "
-            f"--language {shlex.quote(str(language))} "
-            f"--task transcribe "
-            f"--device {shlex.quote(remote_device)} "
-            f"--fp16 {shlex.quote(remote_fp16)} "
-            f"--output_format json "
-            f"--output_dir ."
+            f"{remote_command} "
+            + " ".join(shlex.quote(str(part)) for part in remote_args)
         )
         print("リモートWhisper文字起こしを実行中...")
         print("実行コマンド:", remote_run_command)
@@ -1070,14 +1149,28 @@ def describe_ai_dependencies():
         "pillow": pillow_status,
     }
     if whisper_backend in ("ssh", "remote"):
+        profile = remote_whisper_profile()
         remote_device = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_DEVICE", "device", "cuda"))
-        remote_fp16_value = remote_whisper_value("DAVINCI_REMOTE_WHISPER_FP16", "fp16", False)
-        remote_fp16 = select_whisper_fp16(remote_device) if str(remote_fp16_value).lower() == "auto" else (
-            "True" if configured_bool(remote_fp16_value) else "False"
-        )
+        remote_fp16 = select_remote_whisper_fp16(remote_device, profile)
         status["whisper"] = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_COMMAND", "command", "whisper"))
         status["whisper_device"] = remote_device
         status["whisper_fp16"] = remote_fp16
+        status["remote_whisper_profile"] = profile
+        status["remote_whisper_model"] = remote_whisper_option(
+            "DAVINCI_REMOTE_WHISPER_MODEL",
+            "model",
+            DEFAULT_REMOTE_WHISPER_MODEL,
+        )
+        status["remote_whisper_beam_size"] = remote_whisper_option(
+            "DAVINCI_REMOTE_WHISPER_BEAM_SIZE",
+            "beam_size",
+            DEFAULT_REMOTE_WHISPER_BEAM_SIZE,
+        )
+        status["remote_whisper_best_of"] = remote_whisper_option(
+            "DAVINCI_REMOTE_WHISPER_BEST_OF",
+            "best_of",
+            DEFAULT_REMOTE_WHISPER_BEST_OF,
+        )
         remote_host = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_HOST", "host", ""))
         remote_user = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_USER", "user", ""))
         status["remote_whisper_host"] = remote_host
@@ -1142,6 +1235,10 @@ def write_ai_assist_files(ai_plan, output_dir):
             f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
         f.write(f"whisper_backend: {dependencies.get('whisper_backend') or 'local'}\n")
         if dependencies.get("remote_whisper_host"):
+            f.write(f"remote_whisper_profile: {dependencies.get('remote_whisper_profile') or ''}\n")
+            f.write(f"remote_whisper_model: {dependencies.get('remote_whisper_model') or ''}\n")
+            f.write(f"remote_whisper_beam_size: {dependencies.get('remote_whisper_beam_size') or ''}\n")
+            f.write(f"remote_whisper_best_of: {dependencies.get('remote_whisper_best_of') or ''}\n")
             f.write(f"remote_whisper_host: {dependencies.get('remote_whisper_host')}\n")
             f.write(f"remote_whisper_user: {dependencies.get('remote_whisper_user') or ''}\n")
             f.write(f"remote_whisper_target: {dependencies.get('remote_whisper_target') or ''}\n")
@@ -1252,6 +1349,10 @@ def build_ai_assist_plan(source_video_path, working_dir):
     print("AI補助の依存ツール状態:")
     print(f"  whisper_backend: {dependencies.get('whisper_backend') or 'local'}")
     if dependencies.get("remote_whisper_host"):
+        print(f"  remote_whisper_profile: {dependencies.get('remote_whisper_profile') or ''}")
+        print(f"  remote_whisper_model: {dependencies.get('remote_whisper_model') or ''}")
+        print(f"  remote_whisper_beam_size: {dependencies.get('remote_whisper_beam_size') or ''}")
+        print(f"  remote_whisper_best_of: {dependencies.get('remote_whisper_best_of') or ''}")
         print(f"  remote_whisper_host: {dependencies.get('remote_whisper_host')}")
         print(f"  remote_whisper_user: {dependencies.get('remote_whisper_user') or ''}")
         print(f"  remote_whisper_target: {dependencies.get('remote_whisper_target') or ''}")
