@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-07-spark-whisper-speed-v1"
+SCRIPT_VERSION = "2026-07-07-remote-without-local-whisper-v1"
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 print(f"Script version: {SCRIPT_VERSION}")
@@ -539,8 +539,11 @@ def resolve_whisper_command():
     whisper_exe = shutil.which("whisper")
     if whisper_exe:
         return [whisper_exe]
-    if importlib.util.find_spec("whisper.__main__"):
-        return [sys.executable, "-m", "whisper"]
+    try:
+        if importlib.util.find_spec("whisper.__main__"):
+            return [sys.executable, "-m", "whisper"]
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return []
     return []
 
 def get_torch_status():
