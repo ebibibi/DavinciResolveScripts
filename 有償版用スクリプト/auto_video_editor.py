@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-06-gpu-whisper-v2"
+SCRIPT_VERSION = "2026-07-07-remote-user-log-v1"
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 print(f"Script version: {SCRIPT_VERSION}")
@@ -603,6 +603,10 @@ def remote_shell_path(path):
         return "$HOME/" + shlex.quote(path[2:])
     return shlex.quote(path)
 
+def format_command_for_log(command):
+    """実行コマンドをログ用に安全に整形する"""
+    return " ".join(shlex.quote(str(part)) for part in command)
+
 def build_remote_client_command(kind):
     """ssh/scpの実行コマンドと共通オプションを組み立てる"""
     if kind == "scp":
@@ -620,6 +624,13 @@ def build_remote_client_command(kind):
     if identity_file:
         args = ["-i", identity_file] + args
     return [command] + args
+
+def build_remote_target(host):
+    """remote_whisper.userがあれば user@host の接続先にする"""
+    user = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_USER", "user", "")).strip()
+    if user and "@" not in host:
+        return f"{user}@{host}"
+    return host
 
 def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
     """Whisperが出力したJSONを、名前揺れを許容して探す"""
@@ -743,6 +754,7 @@ def run_remote_command(ssh_command, host, remote_command, stdout_path=None, stde
     """SSHでリモートコマンドを実行する"""
     base_command = [ssh_command] if isinstance(ssh_command, str) else list(ssh_command)
     command = base_command + [host, remote_command]
+    print("SSH実行:", format_command_for_log(command))
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if stdout_path and result.stdout:
         stdout_path.write_text(result.stdout, encoding="utf-8", errors="replace")
@@ -764,6 +776,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
         print("! remote_whisper.host が未設定です。リモートWhisperをスキップします。")
         return None
 
+    remote_target = build_remote_target(host)
     ssh_command = build_remote_client_command("ssh")
     scp_command = build_remote_client_command("scp")
     remote_command = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_COMMAND", "command", "whisper")).strip()
@@ -799,19 +812,21 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
     stdout_path = output_dir / "whisper_stdout.log"
     stderr_path = output_dir / "whisper_stderr.log"
 
-    print(f"リモートWhisperを使用します: {host}")
+    print(f"リモートWhisperを使用します: {remote_target}")
     print(f"リモート作業ディレクトリ: {remote_job_dir}")
     try:
         run_remote_command(
             ssh_command,
-            host,
+            remote_target,
             f"mkdir -p {remote_shell_path(remote_job_dir)}",
             check=True,
         )
 
         print("リモートへWhisper入力ファイルを転送中...")
+        upload_command = scp_command + [str(upload_file), f"{remote_target}:{remote_input_path}"]
+        print("SCP実行:", format_command_for_log(upload_command))
         subprocess.run(
-            scp_command + [str(upload_file), f"{host}:{remote_input_path}"],
+            upload_command,
             capture_output=True,
             text=True,
             check=True,
@@ -836,7 +851,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
         print("実行コマンド:", remote_run_command)
         run_remote_command(
             ssh_command,
-            host,
+            remote_target,
             remote_run_command,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
@@ -845,7 +860,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
 
         list_result = run_remote_command(
             ssh_command,
-            host,
+            remote_target,
             f"cd {remote_shell_path(remote_job_dir)} && ls -1 *.json 2>/dev/null || true",
             check=False,
         )
@@ -859,8 +874,13 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
             return None
 
         for json_name in remote_json_names:
+            download_command = scp_command + [
+                f"{remote_target}:{remote_join(remote_job_dir, json_name)}",
+                str(output_dir),
+            ]
+            print("SCP実行:", format_command_for_log(download_command))
             subprocess.run(
-                scp_command + [f"{host}:{remote_join(remote_job_dir, json_name)}", str(output_dir)],
+                download_command,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -884,7 +904,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
             try:
                 run_remote_command(
                     ssh_command,
-                    host,
+                    remote_target,
                     f"rm -rf {remote_shell_path(remote_job_dir)}",
                     check=False,
                 )
@@ -1057,7 +1077,11 @@ def describe_ai_dependencies():
         status["whisper"] = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_COMMAND", "command", "whisper"))
         status["whisper_device"] = remote_device
         status["whisper_fp16"] = remote_fp16
-        status["remote_whisper_host"] = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_HOST", "host", ""))
+        remote_host = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_HOST", "host", ""))
+        remote_user = str(remote_whisper_value("DAVINCI_REMOTE_WHISPER_USER", "user", ""))
+        status["remote_whisper_host"] = remote_host
+        status["remote_whisper_user"] = remote_user
+        status["remote_whisper_target"] = build_remote_target(remote_host) if remote_host else ""
         status["remote_whisper_dir"] = str(remote_whisper_value(
             "DAVINCI_REMOTE_WHISPER_DIR",
             "remote_dir",
@@ -1118,6 +1142,8 @@ def write_ai_assist_files(ai_plan, output_dir):
         f.write(f"whisper_backend: {dependencies.get('whisper_backend') or 'local'}\n")
         if dependencies.get("remote_whisper_host"):
             f.write(f"remote_whisper_host: {dependencies.get('remote_whisper_host')}\n")
+            f.write(f"remote_whisper_user: {dependencies.get('remote_whisper_user') or ''}\n")
+            f.write(f"remote_whisper_target: {dependencies.get('remote_whisper_target') or ''}\n")
             f.write(f"remote_whisper_dir: {dependencies.get('remote_whisper_dir') or ''}\n")
             f.write(f"remote_whisper_upload: {dependencies.get('remote_whisper_upload') or ''}\n")
             f.write(
@@ -1226,6 +1252,8 @@ def build_ai_assist_plan(source_video_path, working_dir):
     print(f"  whisper_backend: {dependencies.get('whisper_backend') or 'local'}")
     if dependencies.get("remote_whisper_host"):
         print(f"  remote_whisper_host: {dependencies.get('remote_whisper_host')}")
+        print(f"  remote_whisper_user: {dependencies.get('remote_whisper_user') or ''}")
+        print(f"  remote_whisper_target: {dependencies.get('remote_whisper_target') or ''}")
         print(f"  remote_whisper_upload: {dependencies.get('remote_whisper_upload')}")
         print(
             "  remote_whisper_identity_configured: "

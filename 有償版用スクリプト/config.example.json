@@ -16,6 +16,7 @@
   "whisper_fp16": false,
   "remote_whisper": {
     "host": "",
+    "user": "",
     "identity_file": "",
     "ssh_args": [],
     "scp_args": [],
