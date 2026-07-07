@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-07-remote-user-log-v1"
+SCRIPT_VERSION = "2026-07-07-subprocess-utf8-v1"
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 print(f"Script version: {SCRIPT_VERSION}")
@@ -338,7 +338,7 @@ def run_auto_editor(working_dir):
     print("実行コマンド:", " ".join(command))
     
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = run_text_subprocess(command, check=True)
         print("✓ auto-editor実行成功")
         print(result.stdout)
         return latest_path
@@ -607,6 +607,17 @@ def format_command_for_log(command):
     """実行コマンドをログ用に安全に整形する"""
     return " ".join(shlex.quote(str(part)) for part in command)
 
+def run_text_subprocess(command, check=True):
+    """Windowsの既定cp932に依存せず、UTF-8出力を安全に捕捉する"""
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=check,
+    )
+
 def build_remote_client_command(kind):
     """ssh/scpの実行コマンドと共通オプションを組み立てる"""
     if kind == "scp":
@@ -691,7 +702,7 @@ def build_whisper_command(whisper_command, source_video_path, output_dir, whispe
 def run_whisper_command(command, output_dir):
     """Whisperを実行し、標準出力・標準エラーを保存する"""
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        result = run_text_subprocess(command, check=True)
         write_whisper_process_logs(output_dir, result)
         return True
     except subprocess.CalledProcessError as e:
@@ -741,7 +752,7 @@ def prepare_remote_whisper_input(source_video_path, output_dir):
     print("リモートWhisper用の音声を抽出中...")
     print("実行コマンド:", " ".join(command))
     try:
-        subprocess.run(command, capture_output=True, text=True, check=True)
+        run_text_subprocess(command, check=True)
         print(f"✓ 音声抽出完了: {audio_path}")
         return audio_path
     except subprocess.CalledProcessError as e:
@@ -755,7 +766,7 @@ def run_remote_command(ssh_command, host, remote_command, stdout_path=None, stde
     base_command = [ssh_command] if isinstance(ssh_command, str) else list(ssh_command)
     command = base_command + [host, remote_command]
     print("SSH実行:", format_command_for_log(command))
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    result = run_text_subprocess(command, check=False)
     if stdout_path and result.stdout:
         stdout_path.write_text(result.stdout, encoding="utf-8", errors="replace")
     if stderr_path and result.stderr:
@@ -825,12 +836,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
         print("リモートへWhisper入力ファイルを転送中...")
         upload_command = scp_command + [str(upload_file), f"{remote_target}:{remote_input_path}"]
         print("SCP実行:", format_command_for_log(upload_command))
-        subprocess.run(
-            upload_command,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        run_text_subprocess(upload_command, check=True)
 
         language = configured_value(
             "DAVINCI_WHISPER_LANGUAGE",
@@ -879,12 +885,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
                 str(output_dir),
             ]
             print("SCP実行:", format_command_for_log(download_command))
-            subprocess.run(
-                download_command,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            run_text_subprocess(download_command, check=True)
 
         transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
         if transcript_path:
@@ -1234,7 +1235,7 @@ def create_hook_card_asset(ai_plan, output_dir):
         str(video_path),
     ]
     try:
-        subprocess.run(command, capture_output=True, text=True, check=True)
+        run_text_subprocess(command, check=True)
     except subprocess.CalledProcessError as e:
         print(f"! フックカード動画の生成に失敗しました: {e}")
         if e.stderr:
