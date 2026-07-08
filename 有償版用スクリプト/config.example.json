@@ -20,13 +20,15 @@
   "whisper_fp16": false,
   "whisper_word_timestamps": true,
   "ai_edit_actions": {
-    "captions": true,
-    "chapter_titles": true,
+    "experimental_full_actions": false,
+    "captions": false,
+    "chapter_titles": false,
     "key_point_titles": true,
-    "section_cards": true,
-    "section_break_videos": true,
-    "sound_effects": true,
-    "max_captions": 40
+    "section_cards": false,
+    "section_break_videos": false,
+    "sound_effects": false,
+    "max_captions": 12,
+    "caption_min_gap_seconds": 8
   },
   "sound_effects": [
     {

@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-07-editable-hook-title-v1"
+SCRIPT_VERSION = "2026-07-08-text-v2-markers-v1"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -76,6 +76,8 @@ AI_ASSIST_DIR_NAME = "_ai_assist"
 HOOK_CARD_SECONDS = 4
 CHAPTER_TITLE_SECONDS = 3
 KEY_POINT_TITLE_SECONDS = 4
+TEXT_TITLE_TRACK_INDEX = 2
+TEXT_TITLE_FONT = "HGPSoeiKakugothicUB"
 CHAPTER_INTERVAL_SECONDS = 180
 DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
@@ -276,12 +278,23 @@ def ai_edit_action_enabled(key, default_value=True):
     """ai_edit_actionsの機能フラグを取得"""
     return configured_bool(ai_edit_action_value(key, default_value), default_value)
 
+def experimental_full_actions_enabled():
+    """SEや区切り動画など、まだ荒い実験機能の安全弁"""
+    return ai_edit_action_enabled("experimental_full_actions", False)
+
 def ai_edit_action_int(key, default_value):
     """ai_edit_actionsの整数値を取得"""
     try:
         return int(ai_edit_action_value(key, default_value))
     except Exception:
         return int(default_value)
+
+def ai_edit_action_float(key, default_value):
+    """ai_edit_actionsの小数値を取得"""
+    try:
+        return float(ai_edit_action_value(key, default_value))
+    except Exception:
+        return float(default_value)
 
 def configured_section_break_clip_names():
     """区切り動画ファイル名のリストを取得"""
@@ -1267,19 +1280,25 @@ def build_qc_notes(segments):
 def build_caption_cues(segments):
     """通常テロップ用の短い字幕候補を作る"""
     cues = []
-    max_captions = ai_edit_action_int("max_captions", 40)
+    max_captions = ai_edit_action_int("max_captions", 12)
+    min_gap_seconds = ai_edit_action_float("caption_min_gap_seconds", 8.0)
+    last_time = -999999.0
     for segment in segments:
         if not segment_is_useful(segment):
+            continue
+        segment_start = float(segment["start"])
+        if segment_start - last_time < min_gap_seconds:
             continue
         text = shorten_text(segment["text"], 42)
         if not text:
             continue
         duration = max(1.5, min(5.0, float(segment["end"]) - float(segment["start"])))
         cues.append({
-            "time": float(segment["start"]),
+            "time": segment_start,
             "duration": duration,
             "text": text,
         })
+        last_time = segment_start
         if len(cues) >= max_captions:
             break
     return cues
@@ -1296,7 +1315,7 @@ def build_ai_edit_actions(ai_plan, segments):
             "text": ai_plan["hook_text"],
         })
 
-    if ai_edit_action_enabled("captions", True):
+    if ai_edit_action_enabled("captions", False):
         for cue in build_caption_cues(segments):
             actions.append({
                 "type": "text_title",
@@ -1304,16 +1323,6 @@ def build_ai_edit_actions(ai_plan, segments):
                 "time": cue["time"],
                 "duration": cue["duration"],
                 "text": cue["text"],
-            })
-
-    if ai_edit_action_enabled("chapter_titles", True):
-        for chapter in ai_plan.get("chapters", []):
-            actions.append({
-                "type": "text_title",
-                "style": "chapter",
-                "time": float(chapter["time"]),
-                "duration": CHAPTER_TITLE_SECONDS,
-                "text": build_chapter_title_text(chapter),
             })
 
     if ai_edit_action_enabled("key_point_titles", True):
@@ -1326,7 +1335,7 @@ def build_ai_edit_actions(ai_plan, segments):
                 "text": build_key_point_title_text(cue),
             })
 
-    if ai_edit_action_enabled("section_cards", True):
+    if experimental_full_actions_enabled() and ai_edit_action_enabled("section_cards", False):
         for chapter in ai_plan.get("chapters", [])[1:]:
             title = wrap_hook_text_for_title(chapter.get("title", ""), width=20, max_lines=2)
             actions.append({
@@ -1337,7 +1346,7 @@ def build_ai_edit_actions(ai_plan, segments):
                 "text": f"SECTION\n{title}" if title else "SECTION",
             })
 
-    if ai_edit_action_enabled("section_break_videos", True):
+    if experimental_full_actions_enabled() and ai_edit_action_enabled("section_break_videos", False):
         for chapter in ai_plan.get("chapters", [])[1:]:
             for clip_name in configured_section_break_clip_names():
                 actions.append({
@@ -1350,7 +1359,7 @@ def build_ai_edit_actions(ai_plan, segments):
                     "track_index": 2,
                 })
 
-    if ai_edit_action_enabled("sound_effects", True):
+    if experimental_full_actions_enabled() and ai_edit_action_enabled("sound_effects", False):
         effects = configured_sound_effects()
         key_point_effects = [effect for effect in effects if effect["trigger"] in ("key_point", "keypoint")]
         if key_point_effects:
@@ -1668,7 +1677,7 @@ def configure_text_title_item(timeline_item, text, *, size=0.075, color=None, cl
 
     style_inputs = {
         "Size": size,
-        "Font": "Meiryo",
+        "Font": TEXT_TITLE_FONT,
         "Red1": red,
         "Green1": green,
         "Blue1": blue,
@@ -1694,6 +1703,75 @@ def configure_hook_title_item(timeline_item, hook_text):
         clip_color="Teal",
     )
 
+def ensure_video_track(timeline, track_index):
+    """指定したビデオトラックが存在するように追加する"""
+    try:
+        while int(timeline.GetTrackCount("video")) < int(track_index):
+            if not timeline.AddTrack("video"):
+                return False
+        return True
+    except Exception as e:
+        print(f"! V{track_index}トラック準備でエラー: {e}")
+        return False
+
+def get_track_lock_state(timeline, track_type, track_index):
+    try:
+        return bool(timeline.GetIsTrackLocked(track_type, track_index))
+    except Exception:
+        return None
+
+def set_track_lock_if_possible(timeline, track_type, track_index, locked):
+    try:
+        return bool(timeline.SetTrackLock(track_type, track_index, locked))
+    except Exception:
+        return False
+
+def insert_title_on_video_track(timeline, frame, title_variants, target_track_index):
+    """Text+/TitleをV2などの上位トラックへ入れるため、下位トラックを一時ロックして挿入する"""
+    ensure_video_track(timeline, target_track_index)
+
+    original_locks = {}
+    for track_index in range(1, int(target_track_index)):
+        original_locks[track_index] = get_track_lock_state(timeline, "video", track_index)
+        set_track_lock_if_possible(timeline, "video", track_index, True)
+
+    try:
+        target_tc = frame_to_timecode(timeline, frame)
+        timeline.SetCurrentTimecode(target_tc)
+    except Exception as e:
+        print(f"! Text+挿入位置の設定でエラー: {e}")
+
+    timeline_item = None
+    try:
+        for insert_method, title_name in title_variants:
+            method = getattr(timeline, insert_method, None)
+            if not method:
+                continue
+            try:
+                timeline_item = method(title_name)
+            except Exception as e:
+                print(f"! {insert_method}({title_name}) 失敗: {e}")
+                timeline_item = None
+            if timeline_item:
+                break
+    finally:
+        for track_index, was_locked in original_locks.items():
+            if was_locked is not None:
+                set_track_lock_if_possible(timeline, "video", track_index, was_locked)
+
+    if timeline_item and hasattr(timeline_item, "GetTrackTypeAndIndex"):
+        try:
+            track_type, actual_track_index = timeline_item.GetTrackTypeAndIndex()
+            if track_type == "video" and int(actual_track_index) != int(target_track_index):
+                print(
+                    f"! Text+はV{target_track_index}ではなくV{actual_track_index}に入りました。"
+                    " Resolve側でV1ロックが効かなかった可能性があります。"
+                )
+        except Exception:
+            pass
+
+    return timeline_item
+
 def insert_editable_hook_card(timeline, start_frame, ai_plan, fps):
     """mp4ではなく、Resolve上で編集可能なText+/Fusionタイトルを本編先頭へ挿入する"""
     hook_text = ai_plan.get("hook_text")
@@ -1706,29 +1784,16 @@ def insert_editable_hook_card(timeline, start_frame, ai_plan, fps):
         print("! このResolve APIではタイトル挿入が使えません。フックカード追加をスキップします。")
         return 0
 
-    try:
-        target_tc = frame_to_timecode(timeline, start_frame)
-        timeline.SetCurrentTimecode(target_tc)
-        print(f"フックカード挿入位置を {start_frame} フレーム ({target_tc}) に設定しました")
-    except Exception as e:
-        print(f"! フックカード挿入位置の設定でエラー: {e}")
-
-    timeline_item = None
-    for insert_method, title_name in (
-        ("InsertFusionTitleIntoTimeline", "Text+"),
-        ("InsertTitleIntoTimeline", "Text+"),
-        ("InsertTitleIntoTimeline", "Text"),
-    ):
-        method = getattr(timeline, insert_method, None)
-        if not method:
-            continue
-        try:
-            timeline_item = method(title_name)
-        except Exception as e:
-            print(f"! {insert_method}({title_name}) 失敗: {e}")
-            timeline_item = None
-        if timeline_item:
-            break
+    timeline_item = insert_title_on_video_track(
+        timeline,
+        start_frame,
+        (
+            ("InsertFusionTitleIntoTimeline", "Text+"),
+            ("InsertTitleIntoTimeline", "Text+"),
+            ("InsertTitleIntoTimeline", "Text"),
+        ),
+        TEXT_TITLE_TRACK_INDEX,
+    )
 
     if not timeline_item:
         print("! 編集可能なフックカードタイトルを挿入できませんでした。")
@@ -1741,8 +1806,8 @@ def insert_editable_hook_card(timeline, start_frame, ai_plan, fps):
     except Exception:
         hook_frames = fallback_frames
     hook_frames = max(1, hook_frames or fallback_frames)
-    print(f"✓ 編集可能なフックカードを追加しました: {hook_frames} frames")
-    return hook_frames
+    print(f"✓ 編集可能なフックカードをV{TEXT_TITLE_TRACK_INDEX}に追加しました: {hook_frames} frames")
+    return 0
 
 def insert_text_title_at_frame(timeline, frame, text, *, fps, seconds, size=0.055, color=None, clip_color="Blue"):
     """指定フレームへText+/Fusionタイトルを挿入して、成立する見た目の文言を設定する"""
@@ -1755,28 +1820,16 @@ def insert_text_title_at_frame(timeline, frame, text, *, fps, seconds, size=0.05
         print("! このResolve APIではタイトル挿入が使えません。Text+追加をスキップします。")
         return 0
 
-    try:
-        target_tc = frame_to_timecode(timeline, frame)
-        timeline.SetCurrentTimecode(target_tc)
-    except Exception as e:
-        print(f"! Text+挿入位置の設定でエラー: {e}")
-
-    timeline_item = None
-    for insert_method, title_name in (
-        ("InsertFusionTitleIntoTimeline", "Text+"),
-        ("InsertTitleIntoTimeline", "Text+"),
-        ("InsertTitleIntoTimeline", "Text"),
-    ):
-        method = getattr(timeline, insert_method, None)
-        if not method:
-            continue
-        try:
-            timeline_item = method(title_name)
-        except Exception as e:
-            print(f"! {insert_method}({title_name}) 失敗: {e}")
-            timeline_item = None
-        if timeline_item:
-            break
+    timeline_item = insert_title_on_video_track(
+        timeline,
+        frame,
+        (
+            ("InsertFusionTitleIntoTimeline", "Text+"),
+            ("InsertTitleIntoTimeline", "Text+"),
+            ("InsertTitleIntoTimeline", "Text"),
+        ),
+        TEXT_TITLE_TRACK_INDEX,
+    )
 
     if not timeline_item:
         print("! Text+タイトルを挿入できませんでした。")
@@ -1799,6 +1852,11 @@ def map_source_time_to_edited_frame(source_seconds, source_duration, edited_dura
         return 0
     ratio = min(max(source_seconds / source_duration, 0), 1)
     return int(ratio * edited_duration_frames)
+
+def map_ai_time_to_timeline_frame(source_time, source_duration, edited_duration_frames, content_start_frame):
+    """AIプラン上の元動画秒数をmainタイムライン上のフレームへ変換する"""
+    mapped = map_source_time_to_edited_frame(source_time, source_duration, edited_duration_frames)
+    return int(content_start_frame + mapped)
 
 def build_chapter_title_text(chapter):
     title = wrap_hook_text_for_title(chapter.get("title", ""), width=20, max_lines=2)
@@ -1828,7 +1886,7 @@ def text_action_style(action):
     return {"size": 0.052, "color": (0.92, 0.96, 1.0), "clip_color": "Teal"}
 
 def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames=0):
-    """mainタイムライン上に、マーカーではなく編集可能なText+補助要素を追加"""
+    """mainタイムライン上のV2に編集可能なText+補助要素を追加"""
     if not ai_plan.get("enabled"):
         reason = ai_plan.get("skip_reason") or "AI assist did not run"
         print(f"! AI補助はスキップされました。理由: {reason}")
@@ -1839,22 +1897,13 @@ def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_du
     added = 0
 
     def mapped_frame(source_time):
-        mapped = map_source_time_to_edited_frame(source_time, source_duration, edited_duration_frames)
-        return int(content_start_frame + mapped)
+        return map_ai_time_to_timeline_frame(source_time, source_duration, edited_duration_frames, content_start_frame)
 
     text_actions = [
         action for action in ai_plan.get("actions", [])
         if action.get("type") == "text_title"
     ]
     if not text_actions:
-        for chapter in ai_plan.get("chapters", []):
-            text_actions.append({
-                "type": "text_title",
-                "style": "chapter",
-                "time": float(chapter["time"]),
-                "duration": CHAPTER_TITLE_SECONDS,
-                "text": build_chapter_title_text(chapter),
-            })
         for cue in ai_plan.get("key_point_cues", []):
             text_actions.append({
                 "type": "text_title",
@@ -1885,6 +1934,33 @@ def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_du
         print(f"✓ QC確認ポイントは最終映像に出さず、_ai_assist のステータスファイルに残しました: {qc_count}件")
 
     print(f"✓ AI補助Text+オブジェクトを追加しました: {added}件")
+
+def insert_chapter_markers(timeline, start_frame, ai_plan, edited_duration_frames, hook_frames=0):
+    """チャプターは映像を押しのけないタイムラインマーカーとして追加する"""
+    if not ai_plan.get("enabled"):
+        return
+    if not hasattr(timeline, "AddMarker"):
+        print("! このResolve APIではタイムラインマーカー追加が使えません。")
+        return
+
+    source_duration = float(ai_plan.get("source_duration") or 0)
+    content_start_frame = start_frame + hook_frames
+    added = 0
+    for chapter in ai_plan.get("chapters", []):
+        title = str(chapter.get("title") or "Chapter").strip() or "Chapter"
+        frame = map_ai_time_to_timeline_frame(
+            float(chapter.get("time", 0)),
+            source_duration,
+            edited_duration_frames,
+            content_start_frame,
+        )
+        try:
+            if timeline.AddMarker(frame, "Blue", title, "AI chapter marker", 1, f"ai_chapter_{frame}"):
+                added += 1
+        except Exception as e:
+            print(f"! チャプターマーカー追加エラー ({title}): {e}")
+
+    print(f"✓ チャプターマーカーを追加しました: {added}件")
 
 def media_pool_item_frames(media_pool_item, fps, fallback_seconds=2):
     """MediaPoolItemのフレーム数を取得する"""
@@ -2280,6 +2356,13 @@ def main():
             
             if insert_result:
                 print(f"✓ mainタイムラインの位置 {start_frame} にクリップを挿入しました")
+                insert_chapter_markers(
+                    main_timeline,
+                    start_frame,
+                    ai_plan,
+                    edited_duration_frames,
+                    hook_frames=hook_frames,
+                )
                 insert_ai_assist_text_objects(
                     main_timeline,
                     start_frame,
