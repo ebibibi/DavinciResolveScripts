@@ -7,6 +7,7 @@
 # Get script directory and change to it
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
+$RepoRoot = Split-Path -Parent $ScriptDir
 
 function Test-CommandAvailable {
     param([string]$Name)
@@ -30,6 +31,34 @@ function Update-CurrentPath {
     $env:Path = "$MachinePath;$UserPath"
 }
 
+function Update-RepositoryBeforeRun {
+    if (-not (Test-CommandAvailable "git")) {
+        Write-Host "git was not found. Install git or run from a cloned repository." -ForegroundColor Red
+        exit 1
+    }
+
+    if (-not (Test-Path (Join-Path $RepoRoot ".git"))) {
+        Write-Host "Git repository was not found at $RepoRoot. Cannot run git pull." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "Updating DavinciResolveScripts with git pull --ff-only --autostash..." -ForegroundColor Cyan
+    Push-Location $RepoRoot
+    try {
+        & git pull --ff-only --autostash
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "git pull failed. Resolve the repository state before running the editor." -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+        Set-Location $ScriptDir
+    }
+
+    $env:DAVINCI_GIT_PULL_DONE = "1"
+}
+
 function Install-AiAssistToolsIfRequested {
     $MissingTools = @()
     $MissingPipPackages = @()
@@ -39,11 +68,6 @@ function Install-AiAssistToolsIfRequested {
     if (-not $WhisperAvailable) {
         $MissingTools += "whisper"
         $MissingPipPackages += "openai-whisper"
-    }
-
-    if (-not (Test-PythonModule "PIL")) {
-        $MissingTools += "Pillow"
-        $MissingPipPackages += "Pillow"
     }
 
     if (-not (Test-CommandAvailable "ffmpeg")) {
@@ -88,11 +112,12 @@ function Install-AiAssistToolsIfRequested {
             & winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements
             Update-CurrentPath
         } else {
-            Write-Host "winget was not found. Install ffmpeg manually to enable hook card videos." -ForegroundColor Yellow
+            Write-Host "winget was not found. Install ffmpeg manually if Whisper audio extraction requires it." -ForegroundColor Yellow
         }
     }
 }
 
+Update-RepositoryBeforeRun
 Install-AiAssistToolsIfRequested
 
 # Execute Python script

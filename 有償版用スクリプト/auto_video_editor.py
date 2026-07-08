@@ -24,7 +24,49 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-07-remote-without-local-whisper-v1"
+SCRIPT_VERSION = "2026-07-07-editable-hook-title-v1"
+GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
+
+def update_repository_before_start():
+    """実行前にリポジトリを更新する。更新が入った場合は最新スクリプトで再起動する。"""
+    if os.environ.get(GIT_PULL_DONE_ENV) == "1":
+        return
+
+    script_path = Path(__file__).resolve()
+    repo_root = script_path.parents[1]
+    if not (repo_root / ".git").exists():
+        print(f"! Git repository was not found at {repo_root}. Cannot run git pull.")
+        sys.exit(1)
+
+    git_exe = shutil.which("git")
+    if not git_exe:
+        print("! git was not found. Install git or run from a cloned repository.")
+        sys.exit(1)
+
+    print("Updating DavinciResolveScripts with git pull --ff-only --autostash...")
+    result = subprocess.run(
+        [git_exe, "pull", "--ff-only", "--autostash"],
+        cwd=str(repo_root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip())
+    if result.returncode != 0:
+        print("! git pull failed. Resolve the repository state before running the editor.")
+        sys.exit(result.returncode)
+
+    os.environ[GIT_PULL_DONE_ENV] = "1"
+    if "Updating " in result.stdout or "Fast-forward" in result.stdout:
+        print("Repository was updated. Restarting with the latest script...")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+update_repository_before_start()
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 print(f"Script version: {SCRIPT_VERSION}")
@@ -32,12 +74,16 @@ print(f"Script version: {SCRIPT_VERSION}")
 AI_ASSIST_ENABLED = os.environ.get("DAVINCI_AI_ASSIST", "1").lower() not in ("0", "false", "no")
 AI_ASSIST_DIR_NAME = "_ai_assist"
 HOOK_CARD_SECONDS = 4
+CHAPTER_TITLE_SECONDS = 3
+KEY_POINT_TITLE_SECONDS = 4
 CHAPTER_INTERVAL_SECONDS = 180
 DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
+DEFAULT_SECTION_BREAK_CLIP_NAMES = ["02_EBI_CHAN_OP.mov", "03_EBI_CHAN_IN.mov"]
 DEFAULT_WHISPER_LANGUAGE = "Japanese"
 DEFAULT_WHISPER_DEVICE = "auto"
 DEFAULT_WHISPER_FP16 = "false"
+DEFAULT_WHISPER_WORD_TIMESTAMPS = True
 DEFAULT_WHISPER_BACKEND = "local"
 DEFAULT_REMOTE_WHISPER_DIR = "davinci-whisper-jobs"
 DEFAULT_REMOTE_WHISPER_PROFILE = "speed"
@@ -175,6 +221,10 @@ def config_section(config_key):
     value = LOCAL_CONFIG.get(config_key)
     return value if isinstance(value, dict) else {}
 
+def config_raw_value(config_key, default_value=None):
+    """ローカル設定ファイルの値をそのまま取得"""
+    return LOCAL_CONFIG.get(config_key, default_value)
+
 def configured_section_value(env_name, section_key, value_key, default_value):
     """環境変数またはローカル設定セクションから単一値を取得"""
     env_value = os.environ.get(env_name)
@@ -208,6 +258,66 @@ def configured_bool(value, default_value=False):
     if not normalized:
         return default_value
     return normalized in ("1", "true", "yes", "on")
+
+def configured_top_level_bool(env_name, config_key, default_value=False):
+    """環境変数またはローカル設定からboolを取得"""
+    env_value = os.environ.get(env_name)
+    if has_config_value(env_value):
+        return configured_bool(env_value, default_value)
+    return configured_bool(LOCAL_CONFIG.get(config_key), default_value)
+
+def ai_edit_action_value(key, default_value=None):
+    """ai_edit_actionsセクションの値を取得"""
+    section = config_section("ai_edit_actions")
+    value = section.get(key)
+    return value if has_config_value(value) else default_value
+
+def ai_edit_action_enabled(key, default_value=True):
+    """ai_edit_actionsの機能フラグを取得"""
+    return configured_bool(ai_edit_action_value(key, default_value), default_value)
+
+def ai_edit_action_int(key, default_value):
+    """ai_edit_actionsの整数値を取得"""
+    try:
+        return int(ai_edit_action_value(key, default_value))
+    except Exception:
+        return int(default_value)
+
+def configured_section_break_clip_names():
+    """区切り動画ファイル名のリストを取得"""
+    env_value = os.environ.get("DAVINCI_SECTION_BREAK_CLIP_NAMES")
+    if env_value:
+        return [item.strip().strip('"') for item in env_value.split(os.pathsep) if item.strip()]
+
+    value = config_raw_value("section_break_clip_names")
+    if isinstance(value, list):
+        return [str(item).strip().strip('"') for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [item.strip().strip('"') for item in value.split(os.pathsep) if item.strip()]
+    return list(DEFAULT_SECTION_BREAK_CLIP_NAMES)
+
+def configured_sound_effects():
+    """SE自動挿入用の設定リストを取得"""
+    value = config_raw_value("sound_effects", [])
+    if isinstance(value, dict):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    effects = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        clip_name = str(item.get("clip_name") or item.get("path") or "").strip()
+        if not clip_name:
+            continue
+        effects.append({
+            "name": str(item.get("name") or Path(clip_name).stem),
+            "clip_name": clip_name,
+            "trigger": str(item.get("trigger") or "key_point"),
+            "track_index": int(item.get("track_index") or 3),
+            "cooldown_seconds": float(item.get("cooldown_seconds") or 20),
+        })
+    return effects
 
 def first_existing_path(paths):
     """候補から最初に存在するパスを返す"""
@@ -461,7 +571,7 @@ def unique_keep_order(items):
     return unique
 
 def normalize_term(term):
-    """マーカー名にしやすい形へ整える"""
+    """短い表示ラベルにしやすい形へ整える"""
     term = clean_text(term).strip("、。,.!?「」『』()[]{}")
     for prefix in ("ここで実際に", "ここから", "最後に", "今日は", "今回", "実際に"):
         if term.startswith(prefix):
@@ -509,7 +619,7 @@ def segment_has_key_cue(segment):
     return bool(extract_terms_from_text(text))
 
 def key_point_label(segment):
-    """マーカー名に使う短いラベルを作る"""
+    """Text+表示に使う短いラベルを作る"""
     terms = extract_terms_from_text(segment.get("text", ""))
     if terms:
         return terms[0]
@@ -531,7 +641,17 @@ def load_transcript_segments(transcript_path):
             continue
         if end <= start:
             end = start + 1
-        segments.append({"start": start, "end": end, "text": text})
+        words = []
+        for word in item.get("words", []) or []:
+            try:
+                word_start = float(word.get("start", start))
+                word_end = float(word.get("end", end))
+            except (TypeError, ValueError):
+                continue
+            word_text = clean_text(word.get("word", ""))
+            if word_text:
+                words.append({"start": word_start, "end": word_end, "word": word_text})
+        segments.append({"start": start, "end": end, "text": text, "words": words})
     return segments
 
 def resolve_whisper_command():
@@ -603,6 +723,14 @@ def select_whisper_fp16(whisper_device):
     if normalized in ("1", "true", "yes", "on"):
         return "True"
     return "False"
+
+def select_whisper_word_timestamps():
+    """Whisperの単語タイムスタンプ利用有無を選ぶ"""
+    return "True" if configured_top_level_bool(
+        "DAVINCI_WHISPER_WORD_TIMESTAMPS",
+        "whisper_word_timestamps",
+        DEFAULT_WHISPER_WORD_TIMESTAMPS,
+    ) else "False"
 
 def remote_whisper_value(env_name, value_key, default_value):
     """remote_whisperセクションの値を取得"""
@@ -748,6 +876,8 @@ def build_whisper_command(whisper_command, source_video_path, output_dir, whispe
         whisper_device,
         "--fp16",
         whisper_fp16,
+        "--word_timestamps",
+        select_whisper_word_timestamps(),
         "--output_format",
         "json",
         "--output_dir",
@@ -924,6 +1054,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
             "--task", "transcribe",
             "--device", remote_device,
             "--fp16", remote_fp16,
+            "--word_timestamps", select_whisper_word_timestamps(),
             "--beam_size", remote_beam_size,
             "--best_of", remote_best_of,
             "--verbose", remote_verbose,
@@ -1087,7 +1218,7 @@ def build_chapters(segments):
     return chapters
 
 def build_key_point_cues(segments):
-    """発話内容からキーポイントマーカー候補を作る"""
+    """発話内容からキーポイントText+候補を作る"""
     cues = []
     seen = set()
     for segment in segments:
@@ -1133,14 +1264,119 @@ def build_qc_notes(segments):
             break
     return notes
 
+def build_caption_cues(segments):
+    """通常テロップ用の短い字幕候補を作る"""
+    cues = []
+    max_captions = ai_edit_action_int("max_captions", 40)
+    for segment in segments:
+        if not segment_is_useful(segment):
+            continue
+        text = shorten_text(segment["text"], 42)
+        if not text:
+            continue
+        duration = max(1.5, min(5.0, float(segment["end"]) - float(segment["start"])))
+        cues.append({
+            "time": float(segment["start"]),
+            "duration": duration,
+            "text": text,
+        })
+        if len(cues) >= max_captions:
+            break
+    return cues
+
+def build_ai_edit_actions(ai_plan, segments):
+    """AI補助結果からResolveに適用する編集アクションを作る"""
+    actions = []
+
+    if ai_plan.get("hook_text"):
+        actions.append({
+            "type": "hook_card",
+            "time": 0.0,
+            "duration": HOOK_CARD_SECONDS,
+            "text": ai_plan["hook_text"],
+        })
+
+    if ai_edit_action_enabled("captions", True):
+        for cue in build_caption_cues(segments):
+            actions.append({
+                "type": "text_title",
+                "style": "caption",
+                "time": cue["time"],
+                "duration": cue["duration"],
+                "text": cue["text"],
+            })
+
+    if ai_edit_action_enabled("chapter_titles", True):
+        for chapter in ai_plan.get("chapters", []):
+            actions.append({
+                "type": "text_title",
+                "style": "chapter",
+                "time": float(chapter["time"]),
+                "duration": CHAPTER_TITLE_SECONDS,
+                "text": build_chapter_title_text(chapter),
+            })
+
+    if ai_edit_action_enabled("key_point_titles", True):
+        for cue in ai_plan.get("key_point_cues", []):
+            actions.append({
+                "type": "text_title",
+                "style": "key_point",
+                "time": float(cue["time"]),
+                "duration": KEY_POINT_TITLE_SECONDS,
+                "text": build_key_point_title_text(cue),
+            })
+
+    if ai_edit_action_enabled("section_cards", True):
+        for chapter in ai_plan.get("chapters", [])[1:]:
+            title = wrap_hook_text_for_title(chapter.get("title", ""), width=20, max_lines=2)
+            actions.append({
+                "type": "text_title",
+                "style": "section_card",
+                "time": float(chapter["time"]),
+                "duration": 4.0,
+                "text": f"SECTION\n{title}" if title else "SECTION",
+            })
+
+    if ai_edit_action_enabled("section_break_videos", True):
+        for chapter in ai_plan.get("chapters", [])[1:]:
+            for clip_name in configured_section_break_clip_names():
+                actions.append({
+                    "type": "media_clip",
+                    "style": "section_break",
+                    "time": float(chapter["time"]),
+                    "duration": 0,
+                    "clip_name": clip_name,
+                    "media_type": 1,
+                    "track_index": 2,
+                })
+
+    if ai_edit_action_enabled("sound_effects", True):
+        effects = configured_sound_effects()
+        key_point_effects = [effect for effect in effects if effect["trigger"] in ("key_point", "keypoint")]
+        if key_point_effects:
+            last_by_effect = {}
+            for cue in ai_plan.get("key_point_cues", []):
+                cue_time = float(cue["time"])
+                for effect in key_point_effects:
+                    last_time = last_by_effect.get(effect["name"], -999999)
+                    if cue_time - last_time < effect["cooldown_seconds"]:
+                        continue
+                    actions.append({
+                        "type": "sound_effect",
+                        "style": "key_point",
+                        "time": cue_time,
+                        "duration": 0,
+                        "clip_name": effect["clip_name"],
+                        "media_type": 2,
+                        "track_index": effect["track_index"],
+                    })
+                    last_by_effect[effect["name"]] = cue_time
+                    break
+
+    return sorted(actions, key=lambda action: float(action.get("time", 0)))
+
 def describe_ai_dependencies():
     """AI補助に必要な外部ツールの状態を返す"""
-    try:
-        import PIL
-        pillow_status = getattr(PIL, "__version__", "available")
-    except ImportError:
-        pillow_status = ""
-
     whisper_backend = select_whisper_backend()
     status = {
         "script_version": SCRIPT_VERSION,
@@ -1148,8 +1384,8 @@ def describe_ai_dependencies():
         "whisper": " ".join(resolve_whisper_command()),
         "whisper_device": select_whisper_device(),
         "whisper_fp16": select_whisper_fp16(select_whisper_device()),
+        "whisper_word_timestamps": select_whisper_word_timestamps(),
         "ffmpeg": shutil.which("ffmpeg") or "",
-        "pillow": pillow_status,
     }
     if whisper_backend in ("ssh", "remote"):
         profile = remote_whisper_profile()
@@ -1207,9 +1443,12 @@ def empty_ai_plan(reason, dependencies=None):
         "dependencies": dependencies or {},
         "hook_text": "",
         "hook_asset_path": "",
+        "hook_insert_mode": "",
+        "timeline_insert_mode": "",
         "chapters": [],
         "key_point_cues": [],
         "qc_notes": [],
+        "actions": [],
         "source_duration": 0,
     }
 
@@ -1254,96 +1493,33 @@ def write_ai_assist_files(ai_plan, output_dir):
         f.write(f"whisper: {dependencies.get('whisper') or 'NOT FOUND'}\n")
         f.write(f"whisper_device: {dependencies.get('whisper_device') or 'NOT SET'}\n")
         f.write(f"whisper_fp16: {dependencies.get('whisper_fp16') or 'NOT SET'}\n")
+        f.write(f"whisper_word_timestamps: {dependencies.get('whisper_word_timestamps') or 'NOT SET'}\n")
         f.write(f"torch: {dependencies.get('torch') or 'NOT FOUND'}\n")
         f.write(f"torch_cuda_available: {dependencies.get('torch_cuda_available')}\n")
         f.write(f"torch_cuda_version: {dependencies.get('torch_cuda_version') or ''}\n")
         f.write(f"torch_cuda_device: {dependencies.get('torch_cuda_device') or ''}\n")
         f.write(f"ffmpeg: {dependencies.get('ffmpeg') or 'NOT FOUND'}\n")
-        f.write(f"pillow: {dependencies.get('pillow') or 'NOT FOUND'}\n")
         f.write(f"hook_asset_path: {ai_plan.get('hook_asset_path') or ''}\n")
+        f.write(f"hook_insert_mode: {ai_plan.get('hook_insert_mode') or ''}\n")
+        f.write(f"timeline_insert_mode: {ai_plan.get('timeline_insert_mode') or ''}\n")
         f.write(f"chapters: {len(ai_plan.get('chapters', []))}\n")
         f.write(f"key_point_cues: {len(ai_plan.get('key_point_cues', []))}\n")
         f.write(f"qc_notes: {len(ai_plan.get('qc_notes', []))}\n")
+        f.write(f"actions: {len(ai_plan.get('actions', []))}\n")
 
     print(f"✓ AI編集プランを書き出しました: {plan_path}")
     print(f"✓ チャプター草案を書き出しました: {chapters_path}")
     print(f"✓ AI補助ステータスを書き出しました: {status_path}")
 
-def create_hook_card_asset(ai_plan, output_dir):
-    """Pillowとffmpegがあれば、冒頭フックカード動画を作る"""
+def prepare_editable_hook_card(ai_plan):
+    """Resolve上で編集可能なフックカード挿入モードをプランに記録する"""
     hook_text = ai_plan.get("hook_text")
     if not hook_text:
         return None
-    if not shutil.which("ffmpeg"):
-        print("! ffmpegが見つかりません。フックカード動画の生成をスキップします。")
-        return None
-
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError:
-        print("! Pillowが見つかりません。フックカード動画の生成をスキップします。")
-        return None
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    png_path = output_dir / "hook_card.png"
-    video_path = output_dir / "hook_card.mp4"
-
-    image = Image.new("RGB", (1920, 1080), (18, 24, 31))
-    draw = ImageDraw.Draw(image)
-    font_candidates = [
-        r"C:\Windows\Fonts\meiryo.ttc",
-        r"C:\Windows\Fonts\YuGothB.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    ]
-    title_font = None
-    body_font = None
-    for font_path in font_candidates:
-        if os.path.exists(font_path):
-            title_font = ImageFont.truetype(font_path, 54)
-            body_font = ImageFont.truetype(font_path, 76)
-            break
-    if title_font is None:
-        title_font = ImageFont.load_default()
-        body_font = ImageFont.load_default()
-
-    draw.rectangle((0, 0, 1920, 1080), fill=(18, 24, 31))
-    draw.rectangle((120, 116, 1800, 964), outline=(70, 130, 180), width=5)
-    draw.text((160, 168), "AI DRAFT HOOK", fill=(102, 204, 255), font=title_font)
-
-    wrapped = textwrap.wrap(hook_text, width=22)
-    y = 390
-    for line in wrapped[:4]:
-        draw.text((160, y), line, fill=(245, 248, 250), font=body_font)
-        y += 110
-    draw.text((160, 875), "必要ならDaVinci上で削除・編集してください", fill=(180, 190, 200), font=title_font)
-    image.save(png_path)
-
-    command = [
-        "ffmpeg",
-        "-y",
-        "-loop",
-        "1",
-        "-i",
-        str(png_path),
-        "-t",
-        str(HOOK_CARD_SECONDS),
-        "-r",
-        "30",
-        "-pix_fmt",
-        "yuv420p",
-        str(video_path),
-    ]
-    try:
-        run_text_subprocess(command, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"! フックカード動画の生成に失敗しました: {e}")
-        if e.stderr:
-            print(e.stderr)
-        return None
-
-    print(f"✓ フックカード動画を作成しました: {video_path}")
-    return str(video_path)
+    ai_plan["hook_asset_path"] = ""
+    ai_plan["hook_insert_mode"] = "resolve_editable_text_plus"
+    print("✓ フックカードはmp4ではなく、Resolve上で編集可能なText+/Fusionタイトルとして追加します。")
+    return ai_plan["hook_insert_mode"]
 
 def build_ai_assist_plan(source_video_path, working_dir):
     """文字起こしからDaVinci上に置く補助情報を作る。失敗時は空プランを返す。"""
@@ -1372,7 +1548,6 @@ def build_ai_assist_plan(source_video_path, working_dir):
     if dependencies.get("torch_cuda_device"):
         print(f"  torch CUDA device: {dependencies.get('torch_cuda_device')}")
     print(f"  ffmpeg: {dependencies.get('ffmpeg') or 'NOT FOUND'}")
-    print(f"  Pillow: {dependencies.get('pillow') or 'NOT FOUND'}")
 
     if not AI_ASSIST_ENABLED:
         print("! DAVINCI_AI_ASSIST=0 のためAI補助をスキップします。")
@@ -1409,9 +1584,10 @@ def build_ai_assist_plan(source_video_path, working_dir):
             "key_point_cues": build_key_point_cues(segments),
             "qc_notes": build_qc_notes(segments),
             "source_duration": segments[-1]["end"],
+            "timeline_insert_mode": "resolve_editable_text_plus",
         }
-        hook_asset_path = create_hook_card_asset(ai_plan, output_dir)
-        ai_plan["hook_asset_path"] = hook_asset_path or ""
+        prepare_editable_hook_card(ai_plan)
+        ai_plan["actions"] = build_ai_edit_actions(ai_plan, segments)
         write_ai_assist_files(ai_plan, output_dir)
         return ai_plan
     except Exception as e:
@@ -1420,32 +1596,202 @@ def build_ai_assist_plan(source_video_path, working_dir):
         write_ai_assist_files(ai_plan, output_dir)
         return ai_plan
 
-def prepare_hook_clip(media_pool, ai_plan, fps):
-    """フックカード動画をメディアプールに読み込み、挿入用clipInfoを返す"""
-    hook_asset_path = ai_plan.get("hook_asset_path")
-    if not hook_asset_path or not os.path.exists(hook_asset_path):
+def wrap_hook_text_for_title(text, width=18, max_lines=4):
+    """Text+で読みやすいように、空白あり/なしの文を軽く折り返す"""
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not text:
+        return ""
+    if re.search(r"\s", text):
+        lines = textwrap.wrap(text, width=width)
+    else:
+        lines = [text[index:index + width] for index in range(0, len(text), width)]
+    return "\n".join(lines[:max_lines])
+
+def get_first_fusion_tool(comp, tool_type):
+    """Fusion composition内の最初の指定toolを返す"""
+    if comp is None or not hasattr(comp, "GetToolList"):
         return None
+    try:
+        tools = comp.GetToolList(False, tool_type)
+    except Exception:
+        return None
+    if isinstance(tools, dict):
+        return next(iter(tools.values()), None)
+    if isinstance(tools, list):
+        return tools[0] if tools else None
+    return None
+
+def set_fusion_input(tool, name, value):
+    """Fusion tool inputを、API差分に耐える形で設定する"""
+    if tool is None:
+        return False
+    try:
+        result = tool.SetInput(name, value)
+        if result is not False:
+            return True
+    except Exception:
+        pass
+    try:
+        setattr(tool, name, value)
+        return True
+    except Exception:
+        return False
+
+def configure_text_title_item(timeline_item, text, *, size=0.075, color=None, clip_color="Teal"):
+    """挿入したText+/Fusionタイトルの表示文言と基本スタイルを設定する"""
+    if timeline_item is None:
+        return False
+    try:
+        timeline_item.SetClipColor(clip_color)
+    except Exception:
+        pass
+
+    comp = None
+    try:
+        if hasattr(timeline_item, "GetFusionCompCount") and timeline_item.GetFusionCompCount() >= 1:
+            comp = timeline_item.GetFusionCompByIndex(1)
+    except Exception:
+        comp = None
+    if comp is None:
+        try:
+            comp = timeline_item.AddFusionComp()
+        except Exception:
+            comp = None
+
+    text_tool = get_first_fusion_tool(comp, "TextPlus")
+    if text_tool is None:
+        print("! Text+ツールを見つけられませんでした。タイトルはResolve上で手動編集してください。")
+        return False
+
+    configured = set_fusion_input(text_tool, "StyledText", text)
+    red, green, blue = color or (0.92, 0.96, 1.0)
+
+    style_inputs = {
+        "Size": size,
+        "Font": "Meiryo",
+        "Red1": red,
+        "Green1": green,
+        "Blue1": blue,
+        "HorizontalJustification": 1,
+        "VerticalJustification": 1,
+    }
+    for input_name, value in style_inputs.items():
+        set_fusion_input(text_tool, input_name, value)
+
+    if configured:
+        print("✓ Text+の文言を設定しました。Resolve上で直接編集できます。")
+    return configured
+
+def configure_hook_title_item(timeline_item, hook_text):
+    """挿入したフックカードタイトルの文言と基本スタイルを設定する"""
+    body_text = wrap_hook_text_for_title(hook_text)
+    title_text = f"AI DRAFT HOOK\n\n{body_text}" if body_text else "AI DRAFT HOOK"
+    return configure_text_title_item(
+        timeline_item,
+        title_text,
+        size=0.075,
+        color=(0.92, 0.96, 1.0),
+        clip_color="Teal",
+    )
+
+def insert_editable_hook_card(timeline, start_frame, ai_plan, fps):
+    """mp4ではなく、Resolve上で編集可能なText+/Fusionタイトルを本編先頭へ挿入する"""
+    hook_text = ai_plan.get("hook_text")
+    if not hook_text:
+        return 0
+    if not (
+        hasattr(timeline, "InsertFusionTitleIntoTimeline")
+        or hasattr(timeline, "InsertTitleIntoTimeline")
+    ):
+        print("! このResolve APIではタイトル挿入が使えません。フックカード追加をスキップします。")
+        return 0
 
     try:
-        hook_clips = media_pool.ImportMedia([hook_asset_path])
-        if not hook_clips:
-            print("! フックカード動画のインポートに失敗しました。")
-            return None
-        hook_clip = hook_clips[0]
-        try:
-            hook_frames = int(hook_clip.GetClipProperty("Frames"))
-        except Exception:
-            hook_frames = HOOK_CARD_SECONDS * fps
-        hook_frames = max(hook_frames, HOOK_CARD_SECONDS * fps)
-        print(f"✓ フックカードを挿入候補に追加: {hook_clip.GetName()} ({hook_frames} frames)")
-        return {
-            "mediaPoolItem": hook_clip,
-            "startFrame": 0,
-            "endFrame": hook_frames,
-        }, hook_frames
+        target_tc = frame_to_timecode(timeline, start_frame)
+        timeline.SetCurrentTimecode(target_tc)
+        print(f"フックカード挿入位置を {start_frame} フレーム ({target_tc}) に設定しました")
     except Exception as e:
-        print(f"! フックカード準備でエラー: {e}")
-        return None
+        print(f"! フックカード挿入位置の設定でエラー: {e}")
+
+    timeline_item = None
+    for insert_method, title_name in (
+        ("InsertFusionTitleIntoTimeline", "Text+"),
+        ("InsertTitleIntoTimeline", "Text+"),
+        ("InsertTitleIntoTimeline", "Text"),
+    ):
+        method = getattr(timeline, insert_method, None)
+        if not method:
+            continue
+        try:
+            timeline_item = method(title_name)
+        except Exception as e:
+            print(f"! {insert_method}({title_name}) 失敗: {e}")
+            timeline_item = None
+        if timeline_item:
+            break
+
+    if not timeline_item:
+        print("! 編集可能なフックカードタイトルを挿入できませんでした。")
+        return 0
+
+    configure_hook_title_item(timeline_item, hook_text)
+    fallback_frames = int(HOOK_CARD_SECONDS * fps)
+    try:
+        hook_frames = int(timeline_item.GetDuration(False))
+    except Exception:
+        hook_frames = fallback_frames
+    hook_frames = max(1, hook_frames or fallback_frames)
+    print(f"✓ 編集可能なフックカードを追加しました: {hook_frames} frames")
+    return hook_frames
+
+def insert_text_title_at_frame(timeline, frame, text, *, fps, seconds, size=0.055, color=None, clip_color="Blue"):
+    """指定フレームへText+/Fusionタイトルを挿入して、成立する見た目の文言を設定する"""
+    if not text:
+        return 0
+    if not (
+        hasattr(timeline, "InsertFusionTitleIntoTimeline")
+        or hasattr(timeline, "InsertTitleIntoTimeline")
+    ):
+        print("! このResolve APIではタイトル挿入が使えません。Text+追加をスキップします。")
+        return 0
+
+    try:
+        target_tc = frame_to_timecode(timeline, frame)
+        timeline.SetCurrentTimecode(target_tc)
+    except Exception as e:
+        print(f"! Text+挿入位置の設定でエラー: {e}")
+
+    timeline_item = None
+    for insert_method, title_name in (
+        ("InsertFusionTitleIntoTimeline", "Text+"),
+        ("InsertTitleIntoTimeline", "Text+"),
+        ("InsertTitleIntoTimeline", "Text"),
+    ):
+        method = getattr(timeline, insert_method, None)
+        if not method:
+            continue
+        try:
+            timeline_item = method(title_name)
+        except Exception as e:
+            print(f"! {insert_method}({title_name}) 失敗: {e}")
+            timeline_item = None
+        if timeline_item:
+            break
+
+    if not timeline_item:
+        print("! Text+タイトルを挿入できませんでした。")
+        return 0
+
+    configure_text_title_item(
+        timeline_item,
+        text,
+        size=size,
+        color=color,
+        clip_color=clip_color,
+    )
+
+    expected_frames = max(1, int(seconds * fps))
+    return expected_frames
 
 def map_source_time_to_edited_frame(source_seconds, source_duration, edited_duration_frames):
     """元動画時間をauto-editor後タイムラインの近似フレームへ変換"""
@@ -1454,53 +1800,174 @@ def map_source_time_to_edited_frame(source_seconds, source_duration, edited_dura
     ratio = min(max(source_seconds / source_duration, 0), 1)
     return int(ratio * edited_duration_frames)
 
-def add_ai_assist_markers(timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames=0):
-    """mainタイムライン上にAI補助マーカーを追加"""
-    if not hasattr(timeline, "AddMarker"):
-        print("! このResolve APIではAddMarkerが使えません。マーカー追加をスキップします。")
-        return
+def build_chapter_title_text(chapter):
+    title = wrap_hook_text_for_title(chapter.get("title", ""), width=20, max_lines=2)
+    return f"CHAPTER\n{title}" if title else "CHAPTER"
+
+def build_key_point_title_text(cue):
+    label = wrap_hook_text_for_title(cue.get("label", ""), width=18, max_lines=2)
+    note = wrap_hook_text_for_title(cue.get("note", ""), width=22, max_lines=2)
+    lines = ["KEY POINT"]
+    if label:
+        lines.append(label)
+    if note:
+        lines.append(note)
+    return "\n".join(lines)
+
+def text_action_style(action):
+    """Text+ actionの見た目設定を返す"""
+    style = action.get("style")
+    if style == "caption":
+        return {"size": 0.045, "color": (1.0, 1.0, 1.0), "clip_color": "Orange"}
+    if style == "chapter":
+        return {"size": 0.052, "color": (0.68, 0.86, 1.0), "clip_color": "Blue"}
+    if style == "key_point":
+        return {"size": 0.052, "color": (1.0, 0.88, 0.42), "clip_color": "Yellow"}
+    if style == "section_card":
+        return {"size": 0.07, "color": (0.70, 1.0, 0.92), "clip_color": "Teal"}
+    return {"size": 0.052, "color": (0.92, 0.96, 1.0), "clip_color": "Teal"}
+
+def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames=0):
+    """mainタイムライン上に、マーカーではなく編集可能なText+補助要素を追加"""
     if not ai_plan.get("enabled"):
         reason = ai_plan.get("skip_reason") or "AI assist did not run"
-        try:
-            timeline.AddMarker(int(start_frame), "Red", "AI Assist skipped", reason, 1, "")
-            print(f"! AI補助はスキップされました。理由: {reason}")
-        except Exception as e:
-            print(f"! AI補助スキップマーカー追加エラー: {e}")
+        print(f"! AI補助はスキップされました。理由: {reason}")
         return
 
     source_duration = float(ai_plan.get("source_duration") or 0)
     content_start_frame = start_frame + hook_frames
     added = 0
 
-    def add_marker(source_time, color, name, note):
-        nonlocal added
+    def mapped_frame(source_time):
         mapped = map_source_time_to_edited_frame(source_time, source_duration, edited_duration_frames)
-        frame = int(content_start_frame + mapped)
-        try:
-            ok = timeline.AddMarker(frame, color, name, note, 1, "")
-        except Exception as e:
-            print(f"! マーカー追加エラー ({name}): {e}")
-            return
-        if ok:
+        return int(content_start_frame + mapped)
+
+    text_actions = [
+        action for action in ai_plan.get("actions", [])
+        if action.get("type") == "text_title"
+    ]
+    if not text_actions:
+        for chapter in ai_plan.get("chapters", []):
+            text_actions.append({
+                "type": "text_title",
+                "style": "chapter",
+                "time": float(chapter["time"]),
+                "duration": CHAPTER_TITLE_SECONDS,
+                "text": build_chapter_title_text(chapter),
+            })
+        for cue in ai_plan.get("key_point_cues", []):
+            text_actions.append({
+                "type": "text_title",
+                "style": "key_point",
+                "time": float(cue["time"]),
+                "duration": KEY_POINT_TITLE_SECONDS,
+                "text": build_key_point_title_text(cue),
+            })
+
+    for action in text_actions:
+        frame = mapped_frame(float(action.get("time", 0)))
+        style = text_action_style(action)
+        inserted = insert_text_title_at_frame(
+            timeline,
+            frame,
+            action.get("text", ""),
+            fps=fps,
+            seconds=float(action.get("duration") or 3),
+            size=style["size"],
+            color=style["color"],
+            clip_color=style["clip_color"],
+        )
+        if inserted:
             added += 1
 
-    if ai_plan.get("hook_text"):
+    qc_count = len(ai_plan.get("qc_notes", []))
+    if qc_count:
+        print(f"✓ QC確認ポイントは最終映像に出さず、_ai_assist のステータスファイルに残しました: {qc_count}件")
+
+    print(f"✓ AI補助Text+オブジェクトを追加しました: {added}件")
+
+def media_pool_item_frames(media_pool_item, fps, fallback_seconds=2):
+    """MediaPoolItemのフレーム数を取得する"""
+    try:
+        frames = int(media_pool_item.GetClipProperty("Frames"))
+        if frames > 0:
+            return frames
+    except Exception:
+        pass
+    return max(1, int(fallback_seconds * fps))
+
+def import_action_media_item(media_pool, video_paths, clip_name, cache):
+    """アクション用メディアをMedia Poolへ取り込む"""
+    if not clip_name:
+        return None
+    if clip_name in cache:
+        return cache[clip_name]
+
+    clip_path = find_clip_path(video_paths, clip_name)
+    if not clip_path:
+        print(f"! アクション用素材が見つかりません: {clip_name}")
+        cache[clip_name] = None
+        return None
+
+    try:
+        clips = media_pool.ImportMedia([clip_path])
+    except Exception as e:
+        print(f"! アクション用素材のインポートに失敗: {clip_name}: {e}")
+        cache[clip_name] = None
+        return None
+    if not clips:
+        print(f"! アクション用素材のインポートに失敗: {clip_name}")
+        cache[clip_name] = None
+        return None
+    cache[clip_name] = clips[0]
+    return clips[0]
+
+def insert_ai_assist_media_actions(media_pool, timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames, video_paths):
+    """区切り動画やSEなどのメディア系アクションを追加する"""
+    if not ai_plan.get("enabled"):
+        return
+
+    media_actions = [
+        action for action in ai_plan.get("actions", [])
+        if action.get("type") in ("media_clip", "sound_effect")
+    ]
+    if not media_actions:
+        return
+
+    source_duration = float(ai_plan.get("source_duration") or 0)
+    content_start_frame = start_frame + hook_frames
+    cache = {}
+    inserted = 0
+
+    for action in media_actions:
+        media_item = import_action_media_item(media_pool, video_paths, action.get("clip_name", ""), cache)
+        if not media_item:
+            continue
+        frame = int(content_start_frame + map_source_time_to_edited_frame(
+            float(action.get("time", 0)),
+            source_duration,
+            edited_duration_frames,
+        ))
+        frames = media_pool_item_frames(media_item, fps)
+        clip_info = {
+            "mediaPoolItem": media_item,
+            "startFrame": 0,
+            "endFrame": frames,
+            "recordFrame": frame,
+        }
+        if action.get("media_type"):
+            clip_info["mediaType"] = int(action["media_type"])
+        if action.get("track_index"):
+            clip_info["trackIndex"] = int(action["track_index"])
         try:
-            timeline.AddMarker(int(start_frame), "Green", "AI Hook", ai_plan["hook_text"], max(1, hook_frames), "")
-            added += 1
+            result = media_pool.AppendToTimeline([clip_info])
         except Exception as e:
-            print(f"! フックマーカー追加エラー: {e}")
+            print(f"! メディアアクション追加エラー ({action.get('clip_name')}): {e}")
+            continue
+        if result:
+            inserted += 1
 
-    for chapter in ai_plan.get("chapters", []):
-        add_marker(float(chapter["time"]), "Blue", "Chapter: " + chapter["title"], "AI chapter draft")
-
-    for cue in ai_plan.get("key_point_cues", []):
-        add_marker(float(cue["time"]), "Yellow", "Key point: " + cue["label"], cue.get("note", ""))
-
-    for note in ai_plan.get("qc_notes", []):
-        add_marker(float(note["time"]), "Red", "QC: " + note["type"], note.get("message", ""))
-
-    print(f"✓ AI補助マーカーを追加しました: {added}件")
+    print(f"✓ AI補助メディアアクションを追加しました: {inserted}件")
 
 def append_clips_with_retry(media_pool, clips_to_append, max_retries=3, delay=2):
     """
@@ -1783,21 +2250,17 @@ def main():
         )
 
         fps = get_timeline_fps(main_timeline)
-        hook_frames = 0
-        hook_clip_result = prepare_hook_clip(media_pool, ai_plan, fps)
-        if hook_clip_result:
-            hook_clip_info, hook_frames = hook_clip_result
-            clips_to_append.insert(0, hook_clip_info)
-            print("✓ フックカードを本編先頭に追加します")
+        hook_frames = insert_editable_hook_card(main_timeline, start_frame, ai_plan, fps)
+        content_start_frame = start_frame + hook_frames
 
         print(f"挿入するクリップ数: {len(clips_to_append)}")
         
         if clips_to_append:
             # 再生ヘッドを配置（SetCurrentFrameはAPIに無いためタイムコードで指定）
             try:
-                target_tc = frame_to_timecode(main_timeline, start_frame)
+                target_tc = frame_to_timecode(main_timeline, content_start_frame)
                 main_timeline.SetCurrentTimecode(target_tc)
-                print(f"再生ヘッド位置を {start_frame} フレーム ({target_tc}) に設定しました")
+                print(f"再生ヘッド位置を {content_start_frame} フレーム ({target_tc}) に設定しました")
             except Exception as e:
                 print(f"再生ヘッド配置でエラー: {str(e)}")
             
@@ -1817,13 +2280,23 @@ def main():
             
             if insert_result:
                 print(f"✓ mainタイムラインの位置 {start_frame} にクリップを挿入しました")
-                add_ai_assist_markers(
+                insert_ai_assist_text_objects(
                     main_timeline,
                     start_frame,
                     ai_plan,
                     fps,
                     edited_duration_frames,
                     hook_frames=hook_frames,
+                )
+                insert_ai_assist_media_actions(
+                    media_pool,
+                    main_timeline,
+                    start_frame,
+                    ai_plan,
+                    fps,
+                    edited_duration_frames,
+                    hook_frames,
+                    video_paths,
                 )
             else:
                 print("✗ クリップの挿入に失敗しました")
