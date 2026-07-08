@@ -22,6 +22,7 @@
   "ai_edit_actions": {
     "experimental_full_actions": false,
     "captions": false,
+    "chapter_markers": true,
     "chapter_titles": false,
     "key_point_titles": true,
     "section_cards": false,

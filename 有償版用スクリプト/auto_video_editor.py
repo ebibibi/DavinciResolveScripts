@@ -24,7 +24,7 @@ import textwrap
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-08-text-v2-markers-v1"
+SCRIPT_VERSION = "2026-07-08-source-scoped-ai-assist-v1"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -498,6 +498,30 @@ def run_auto_editor(working_dir):
         print("✗ auto-editorが見つかりません")
         return None
 
+def find_xml_for_source(xml_files, source_video_path, min_mtime):
+    """今回のauto-editor実行で作られた対象動画のXMLだけを選ぶ"""
+    source_stem = Path(source_video_path).stem.lower()
+    fresh_files = [
+        path for path in xml_files
+        if os.path.getmtime(path) >= min_mtime
+    ]
+    matching_files = [
+        path for path in fresh_files
+        if source_stem in Path(path).stem.lower()
+    ]
+    if matching_files:
+        return max(matching_files, key=os.path.getmtime)
+    if len(fresh_files) == 1:
+        print("! XMLファイル名は対象動画名と一致しませんが、今回生成されたXMLが1件だけなので使用します。")
+        return fresh_files[0]
+    if not fresh_files:
+        print("! 今回のauto-editor実行後に更新されたXMLが見つかりません。前回XMLは使用しません。")
+    else:
+        print("! 今回生成されたXMLを対象動画名で特定できません。前回/別動画XMLの混入を避けるため停止します。")
+        for path in fresh_files:
+            print(f"  候補XML: {path}")
+    return None
+
 def create_project_from_template(pm, template_path, project_name):
     """テンプレートから新しいプロジェクトを作成"""
     print(f"テンプレートからプロジェクトを作成: {project_name}")
@@ -785,6 +809,16 @@ def sanitize_remote_name(value):
     sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value)).strip("._")
     return sanitized or "whisper_job"
 
+def source_ai_assist_dir(working_dir, source_video_path):
+    """別動画のWhisper結果を混ぜないため、AI補助出力をソース動画ごとに分離する"""
+    source_path = Path(source_video_path)
+    try:
+        stat = source_path.stat()
+        source_key = f"{source_path.stem}_{stat.st_size}_{int(stat.st_mtime)}"
+    except Exception:
+        source_key = source_path.stem
+    return Path(working_dir) / AI_ASSIST_DIR_NAME / sanitize_remote_name(source_key)
+
 def remote_join(base_path, *parts):
     """リモートのPOSIXパスを結合する"""
     path = str(base_path).rstrip("/")
@@ -857,8 +891,10 @@ def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
 
     source_stem = source_video_path.stem.lower()
     matching_files = [path for path in json_files if source_stem in path.stem.lower()]
-    candidates = matching_files or json_files
-    return max(candidates, key=lambda path: path.stat().st_mtime)
+    if not matching_files:
+        print(f"! {source_video_path.name} に対応するWhisper JSONが見つかりません。別動画のJSONは再利用しません。")
+        return None
+    return max(matching_files, key=lambda path: path.stat().st_mtime)
 
 def write_whisper_process_logs(output_dir, result):
     """Whisper実行時の標準出力・標準エラーを診断用に保存する"""
@@ -1031,6 +1067,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
         print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
         return transcript_path
 
+    run_started_at = time.time()
     upload_file = prepare_remote_whisper_input(source_video_path, output_dir)
     job_name = sanitize_remote_name(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{source_video_path.stem}")
     remote_job_dir = remote_join(remote_base_dir, job_name)
@@ -1113,7 +1150,7 @@ def run_remote_whisper_transcription(source_video_path, output_dir):
             print("SCP実行:", format_command_for_log(download_command))
             run_text_subprocess(download_command, check=True)
 
-        transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
+        transcript_path = find_whisper_transcript_path(output_dir, source_video_path, min_mtime=run_started_at)
         if transcript_path:
             print(f"✓ リモート文字起こしJSON取得: {transcript_path}")
             return transcript_path
@@ -1152,6 +1189,7 @@ def run_local_whisper_transcription(source_video_path, output_dir):
         print(f"✓ 既存の文字起こしJSONを再利用: {transcript_path}")
         return transcript_path
 
+    run_started_at = time.time()
     whisper_device = select_whisper_device()
     whisper_fp16 = select_whisper_fp16(whisper_device)
     command = build_whisper_command(
@@ -1169,7 +1207,7 @@ def run_local_whisper_transcription(source_video_path, output_dir):
     if not run_whisper_command(command, output_dir):
         return None
 
-    transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
+    transcript_path = find_whisper_transcript_path(output_dir, source_video_path, min_mtime=run_started_at)
     if transcript_path:
         print(f"✓ 文字起こしJSON作成: {transcript_path}")
         return transcript_path
@@ -1186,7 +1224,7 @@ def run_local_whisper_transcription(source_video_path, output_dir):
         print("再実行コマンド:", " ".join(retry_command))
         if not run_whisper_command(retry_command, output_dir):
             return None
-        transcript_path = find_whisper_transcript_path(output_dir, source_video_path)
+        transcript_path = find_whisper_transcript_path(output_dir, source_video_path, min_mtime=run_started_at)
         if transcript_path:
             print(f"✓ 文字起こしJSON作成: {transcript_path}")
             return transcript_path
@@ -1249,6 +1287,24 @@ def build_key_point_cues(segments):
             "note": shorten_text(segment["text"], 60),
         })
         if len(cues) >= 24:
+            break
+    if cues:
+        return cues
+
+    next_time = 20.0
+    for segment in segments:
+        if not segment_is_useful(segment):
+            continue
+        if float(segment["start"]) < next_time:
+            continue
+        cues.append({
+            "time": segment["start"],
+            "label": key_point_label(segment),
+            "terms": extract_terms_from_text(segment["text"]),
+            "note": shorten_text(segment["text"], 60),
+        })
+        next_time = float(segment["start"]) + 75.0
+        if len(cues) >= 8:
             break
     return cues
 
@@ -1482,6 +1538,8 @@ def write_ai_assist_files(ai_plan, output_dir):
         f.write("================\n")
         f.write(f"script_version: {ai_plan.get('script_version') or SCRIPT_VERSION}\n")
         f.write(f"enabled: {bool(ai_plan.get('enabled'))}\n")
+        f.write(f"source_video: {ai_plan.get('source_video') or ''}\n")
+        f.write(f"transcript_path: {ai_plan.get('transcript_path') or ''}\n")
         if ai_plan.get("skip_reason"):
             f.write(f"skip_reason: {ai_plan['skip_reason']}\n")
         f.write(f"whisper_backend: {dependencies.get('whisper_backend') or 'local'}\n")
@@ -1533,7 +1591,7 @@ def prepare_editable_hook_card(ai_plan):
 def build_ai_assist_plan(source_video_path, working_dir):
     """文字起こしからDaVinci上に置く補助情報を作る。失敗時は空プランを返す。"""
     dependencies = describe_ai_dependencies()
-    output_dir = Path(working_dir) / AI_ASSIST_DIR_NAME
+    output_dir = source_ai_assist_dir(working_dir, source_video_path)
     print("AI補助の依存ツール状態:")
     print(f"  whisper_backend: {dependencies.get('whisper_backend') or 'local'}")
     if dependencies.get("remote_whisper_host"):
@@ -1726,14 +1784,24 @@ def set_track_lock_if_possible(timeline, track_type, track_index, locked):
     except Exception:
         return False
 
+def insert_title_with_variants(timeline, title_variants):
+    """利用可能なTitle挿入APIを順に試す"""
+    for insert_method, title_name in title_variants:
+        method = getattr(timeline, insert_method, None)
+        if not method:
+            continue
+        try:
+            timeline_item = method(title_name)
+        except Exception as e:
+            print(f"! {insert_method}({title_name}) 失敗: {e}")
+            timeline_item = None
+        if timeline_item:
+            return timeline_item
+    return None
+
 def insert_title_on_video_track(timeline, frame, title_variants, target_track_index):
     """Text+/TitleをV2などの上位トラックへ入れるため、下位トラックを一時ロックして挿入する"""
     ensure_video_track(timeline, target_track_index)
-
-    original_locks = {}
-    for track_index in range(1, int(target_track_index)):
-        original_locks[track_index] = get_track_lock_state(timeline, "video", track_index)
-        set_track_lock_if_possible(timeline, "video", track_index, True)
 
     try:
         target_tc = frame_to_timecode(timeline, frame)
@@ -1742,22 +1810,26 @@ def insert_title_on_video_track(timeline, frame, title_variants, target_track_in
         print(f"! Text+挿入位置の設定でエラー: {e}")
 
     timeline_item = None
+    original_locks = {}
+    for track_index in range(1, int(target_track_index)):
+        original_locks[track_index] = get_track_lock_state(timeline, "video", track_index)
+        set_track_lock_if_possible(timeline, "video", track_index, True)
+
     try:
-        for insert_method, title_name in title_variants:
-            method = getattr(timeline, insert_method, None)
-            if not method:
-                continue
-            try:
-                timeline_item = method(title_name)
-            except Exception as e:
-                print(f"! {insert_method}({title_name}) 失敗: {e}")
-                timeline_item = None
-            if timeline_item:
-                break
+        timeline_item = insert_title_with_variants(timeline, title_variants)
     finally:
         for track_index, was_locked in original_locks.items():
             if was_locked is not None:
                 set_track_lock_if_possible(timeline, "video", track_index, was_locked)
+
+    if not timeline_item:
+        print("! V2狙いのText+挿入に失敗しました。ロックせずに再試行します。")
+        try:
+            target_tc = frame_to_timecode(timeline, frame)
+            timeline.SetCurrentTimecode(target_tc)
+        except Exception:
+            pass
+        timeline_item = insert_title_with_variants(timeline, title_variants)
 
     if timeline_item and hasattr(timeline_item, "GetTrackTypeAndIndex"):
         try:
@@ -1903,7 +1975,7 @@ def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_du
         action for action in ai_plan.get("actions", [])
         if action.get("type") == "text_title"
     ]
-    if not text_actions:
+    if "actions" not in ai_plan and ai_edit_action_enabled("key_point_titles", True):
         for cue in ai_plan.get("key_point_cues", []):
             text_actions.append({
                 "type": "text_title",
@@ -1939,14 +2011,19 @@ def insert_chapter_markers(timeline, start_frame, ai_plan, edited_duration_frame
     """チャプターは映像を押しのけないタイムラインマーカーとして追加する"""
     if not ai_plan.get("enabled"):
         return
+    if not ai_edit_action_enabled("chapter_markers", True):
+        print("! ai_edit_actions.chapter_markers=false のためチャプターマーカー追加をスキップします。")
+        return
     if not hasattr(timeline, "AddMarker"):
         print("! このResolve APIではタイムラインマーカー追加が使えません。")
         return
 
     source_duration = float(ai_plan.get("source_duration") or 0)
     content_start_frame = start_frame + hook_frames
+    source_id = sanitize_remote_name(Path(ai_plan.get("source_video") or "source").stem)
+    clear_ai_chapter_markers(timeline)
     added = 0
-    for chapter in ai_plan.get("chapters", []):
+    for index, chapter in enumerate(ai_plan.get("chapters", []), start=1):
         title = str(chapter.get("title") or "Chapter").strip() or "Chapter"
         frame = map_ai_time_to_timeline_frame(
             float(chapter.get("time", 0)),
@@ -1955,12 +2032,33 @@ def insert_chapter_markers(timeline, start_frame, ai_plan, edited_duration_frame
             content_start_frame,
         )
         try:
-            if timeline.AddMarker(frame, "Blue", title, "AI chapter marker", 1, f"ai_chapter_{frame}"):
+            custom_data = f"davinci_auto_editor:chapter:{source_id}:{index}:{frame}"
+            if timeline.AddMarker(frame, "Blue", title, "AI chapter marker", 1, custom_data):
                 added += 1
         except Exception as e:
             print(f"! チャプターマーカー追加エラー ({title}): {e}")
 
     print(f"✓ チャプターマーカーを追加しました: {added}件")
+
+def clear_ai_chapter_markers(timeline):
+    """過去にこのスクリプトが付けたチャプターマーカーだけ削除する"""
+    if not hasattr(timeline, "GetMarkers") or not hasattr(timeline, "DeleteMarkerAtFrame"):
+        return
+    try:
+        markers = timeline.GetMarkers() or {}
+    except Exception:
+        return
+    deleted = 0
+    for frame, marker in list(markers.items()):
+        custom_data = str((marker or {}).get("customData") or "")
+        if custom_data.startswith("davinci_auto_editor:chapter:") or custom_data.startswith("ai_chapter_"):
+            try:
+                if timeline.DeleteMarkerAtFrame(frame):
+                    deleted += 1
+            except Exception:
+                pass
+    if deleted:
+        print(f"✓ 既存のAIチャプターマーカーを削除しました: {deleted}件")
 
 def media_pool_item_frames(media_pool_item, fps, fallback_seconds=2):
     """MediaPoolItemのフレーム数を取得する"""
@@ -2176,6 +2274,7 @@ def main():
         print("  config.local.json / config.json の working_dirs、または環境変数 DAVINCI_WORKING_DIRS を確認してください")
         sys.exit(1)
     print(f"✓ OBS録画フォルダ: {working_dir}")
+    auto_editor_started_at = time.time()
     source_video_path = run_auto_editor(working_dir)
     if not source_video_path:
         print("✗ auto-editor実行失敗")
@@ -2203,7 +2302,10 @@ def main():
         print("✗ XMLファイルが見つかりません")
         sys.exit(1)
     
-    latest_xml = max(all_xml_files, key=os.path.getmtime)
+    latest_xml = find_xml_for_source(all_xml_files, source_video_path, auto_editor_started_at)
+    if not latest_xml:
+        print("✗ 今回の動画に対応するXMLファイルが見つかりません")
+        sys.exit(1)
     print(f"✓ 最新XMLファイル: {latest_xml}")
     
     # XMLからタイムラインをインポート
