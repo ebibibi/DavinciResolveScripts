@@ -123,9 +123,9 @@ AI編集補助を無効化したい場合は、環境変数 `DAVINCI_AI_ASSIST=0
 - DaVinci Resolveのタイムラインに章マーカーと「いまの話題」Text+/Fusionタイトルを追加
   - Blue marker: 章
   - Yellow: キーポイントタイトル
-  - Text+/Fusionタイトルは一時タイムラインで複合クリップ化し、`trackIndex: 2` を指定してV2へ非リップル配置
+  - `テンプレート.drp` のMedia Poolに含むネイティブText+素材 `テロップ` を、`trackIndex: 2` でV2へ非リップル配置
   - 追加後に実トラックがV2であることを検証し、V1等へ誤配置された場合は即削除して失敗として記録
-  - フォントは `HGPSoeiKakugothicUB` を設定後にTextPlusから読み戻し、完全一致しなければ失敗として記録
+  - フォントは `HGPSoeiKakugothicUB` / `Regular` を設定後にTextPlusから読み戻し、両方が完全一致しなければ失敗として記録
   - 話題表示は画面右上へ小さく置き、次の話題へ切り替わるまで表示を継続
   - Resolve Scripting APIにはタイトル尺を直接変更するメソッドがないため、既定では4秒ごとの連続したText+として配置
   - QC確認ポイントは最終映像に出さず、動画別 `_ai_assist` フォルダの `ai_assist_status.txt` と `ai_edit_plan.json` に残します

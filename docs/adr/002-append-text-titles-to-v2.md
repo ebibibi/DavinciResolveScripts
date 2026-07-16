@@ -3,14 +3,14 @@ type: adr
 id: ADR-002
 title: Build Text+ assets off-timeline and append them explicitly to V2
 decision: Create Text+ titles on temporary timelines, convert them to compound Media Pool assets, and append them to verified V2 positions.
-status: accepted
+status: superseded
 date: 2026-07-16
 deciders: [Masahiko Ebisu, Claude]
 tags: [davinci-resolve, text-plus, timeline, video-track]
 scope: context
 context: DavinciResolveScripts
 supersedes:
-superseded_by:
+superseded_by: ADR-003
 ---
 
 # Build Text+ assets off-timeline and append them explicitly to V2
@@ -49,4 +49,5 @@ This isolates all potentially rippling title creation from the user's main timel
 ## Related
 
 - [ADR-001: Persistent topic overlays](001-persistent-topic-overlay.md)
+- [ADR-003: Append the bundled native Text+ template directly to V2](003-use-native-text-plus-template.md)
 - [GitHub Issue #7](https://github.com/ebibibi/DavinciResolveScripts/issues/7)
