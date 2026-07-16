@@ -4,6 +4,14 @@
 
 DaVinci Resolve Studio の外部スクリプト API と Whisper 文字起こし結果を組み合わせて、手動編集前のタイムラインに「そのまま残しても成立する」編集候補を自動生成する。
 
+## 現在トピックの常時表示（既定ON）
+
+Whisperセグメントを15〜75秒程度の連続した話題区間へまとめ、各区間から短い表示名を作る。画面右上のText+には `いまの話題` と表示名を載せ、次の話題が始まるまで途切れさせない。
+
+Resolve Scripting APIの `TimelineItem` にはタイトルの終了位置を直接変更するメソッドがない。そのため、長いText+を1個置くのではなく、短いText+を既定4秒単位で連続配置する。これによりResolve側の標準タイトル尺に依存して数秒で消える問題を避ける。
+
+生成結果は `ai_edit_plan.json` の `topics` と `actions`、実際の挿入件数は `ai_assist_status.txt` の `topic_titles_expected` / `topic_titles_inserted` で確認する。
+
 ## APIで確認できたこと
 
 - Resolve は Python / Lua スクリプトで外部制御できる。外部Pythonから使う場合は、Resolve付属の `DaVinciResolveScript` / `fusionscript.dll` などを参照する。

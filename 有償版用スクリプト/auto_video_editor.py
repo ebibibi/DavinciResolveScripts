@@ -21,10 +21,11 @@ import re
 import shlex
 import shutil
 import textwrap
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-08-source-scoped-ai-assist-v1"
+SCRIPT_VERSION = "2026-07-16-persistent-topic-overlay-v1"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -76,6 +77,11 @@ AI_ASSIST_DIR_NAME = "_ai_assist"
 HOOK_CARD_SECONDS = 4
 CHAPTER_TITLE_SECONDS = 3
 KEY_POINT_TITLE_SECONDS = 4
+TOPIC_TARGET_SECONDS = 45
+TOPIC_MIN_SECONDS = 15
+TOPIC_MAX_SECONDS = 75
+TOPIC_OVERLAY_REFRESH_SECONDS = 4.0
+TOPIC_MAX_COUNT = 30
 TEXT_TITLE_TRACK_INDEX = 2
 TEXT_TITLE_FONT = "HGPSoeiKakugothicUB"
 CHAPTER_INTERVAL_SECONDS = 180
@@ -1359,11 +1365,130 @@ def build_caption_cues(segments):
             break
     return cues
 
+def topic_label_from_segments(segments: list[dict], max_chars: int = 24) -> str:
+    """話題ブロック内で繰り返される用語から短い表示名を作る。"""
+    term_counts: Counter[str] = Counter()
+    first_positions = {}
+    for segment_index, segment in enumerate(segments):
+        for term_index, term in enumerate(extract_terms_from_text(segment.get("text", ""))):
+            normalized = normalize_term(term)
+            if not normalized:
+                continue
+            key = normalized.lower()
+            term_counts[key] += 1
+            first_positions.setdefault(key, (segment_index, term_index, normalized))
+
+    ranked_keys = sorted(
+        term_counts,
+        key=lambda key: (
+            -term_counts[key],
+            first_positions[key][0],
+            first_positions[key][1],
+        ),
+    )
+    selected = []
+    for key in ranked_keys:
+        candidate = first_positions[key][2]
+        if any(candidate.lower() in item.lower() or item.lower() in candidate.lower() for item in selected):
+            continue
+        proposed = " / ".join(selected + [candidate])
+        if len(proposed) > max_chars:
+            continue
+        selected.append(candidate)
+        if len(selected) >= 2:
+            break
+    if selected:
+        return " / ".join(selected)
+
+    representative = next(
+        (clean_text(segment.get("text", "")) for segment in segments if segment_is_useful(segment)),
+        "",
+    )
+    representative = re.sub(r"^(今回は|ここでは|次に|続いて|最後に)", "", representative)
+    return shorten_text(representative, max_chars) or "トピック"
+
+def build_topic_ranges(
+    segments: list[dict],
+    *,
+    target_seconds: float = TOPIC_TARGET_SECONDS,
+    min_seconds: float = TOPIC_MIN_SECONDS,
+    max_seconds: float = TOPIC_MAX_SECONDS,
+    max_topics: int = TOPIC_MAX_COUNT,
+) -> list[dict]:
+    """Whisperセグメントを連続した話題表示区間へまとめる。"""
+    usable = sorted(
+        (segment for segment in segments if clean_text(segment.get("text", ""))),
+        key=lambda segment: float(segment.get("start", 0)),
+    )
+    if not usable:
+        return []
+
+    blocks = []
+    current = [usable[0]]
+    block_start = float(usable[0]["start"])
+    for segment in usable[1:]:
+        segment_start = float(segment["start"])
+        segment_end = float(segment["end"])
+        reached_target = segment_start - block_start >= target_seconds
+        exceeds_maximum = segment_end - block_start > max_seconds
+        if (reached_target or exceeds_maximum) and len(blocks) + 1 < max_topics:
+            blocks.append(current)
+            current = [segment]
+            block_start = segment_start
+        else:
+            current.append(segment)
+    blocks.append(current)
+
+    if len(blocks) >= 2:
+        final_start = float(blocks[-1][0]["start"])
+        final_end = float(blocks[-1][-1]["end"])
+        if final_end - final_start < min_seconds:
+            blocks[-2].extend(blocks.pop())
+
+    topics = []
+    transcript_end = float(usable[-1]["end"])
+    for index, block in enumerate(blocks):
+        start = float(block[0]["start"])
+        end = float(blocks[index + 1][0]["start"]) if index + 1 < len(blocks) else transcript_end
+        topics.append({
+            "start": start,
+            "end": max(start + 1.0, end),
+            "label": topic_label_from_segments(block),
+            "source_text": shorten_text(" ".join(item["text"] for item in block), 120),
+        })
+    return topics
+
+def build_topic_overlay_actions(
+    topics: list[dict],
+    *,
+    refresh_seconds: float = TOPIC_OVERLAY_REFRESH_SECONDS,
+) -> list[dict]:
+    """既定尺のText+でも表示が途切れないよう、話題表示を短い連続片へ分ける。"""
+    refresh_seconds = max(1.0, float(refresh_seconds))
+    actions = []
+    for topic in topics:
+        start = float(topic.get("start", 0))
+        end = max(start, float(topic.get("end", start)))
+        label = shorten_text(topic.get("label", ""), 28)
+        cursor = start
+        while cursor < end:
+            duration = min(refresh_seconds, end - cursor)
+            actions.append({
+                "type": "text_title",
+                "style": "current_topic",
+                "time": cursor,
+                "duration": duration,
+                "text": f"いまの話題\n{label}",
+            })
+            cursor += duration
+    return actions
+
 def build_ai_edit_actions(ai_plan, segments):
     """AI補助結果からResolveに適用する編集アクションを作る"""
     actions = []
+    topic_overlay_enabled = ai_edit_action_enabled("current_topic_overlay", True)
 
-    if ai_plan.get("hook_text"):
+    if ai_plan.get("hook_text") and ai_edit_action_enabled("hook_card", False):
         actions.append({
             "type": "hook_card",
             "time": 0.0,
@@ -1381,7 +1506,23 @@ def build_ai_edit_actions(ai_plan, segments):
                 "text": cue["text"],
             })
 
-    if ai_edit_action_enabled("key_point_titles", True):
+    if topic_overlay_enabled:
+        actions.extend(build_topic_overlay_actions(
+            ai_plan.get("topics", []),
+            refresh_seconds=ai_edit_action_float(
+                "topic_overlay_refresh_seconds",
+                TOPIC_OVERLAY_REFRESH_SECONDS,
+            ),
+        ))
+
+    legacy_titles_enabled = (
+        ai_edit_action_enabled("key_point_titles", False)
+        and (
+            not topic_overlay_enabled
+            or ai_edit_action_enabled("combine_legacy_titles", False)
+        )
+    )
+    if legacy_titles_enabled:
         for cue in ai_plan.get("key_point_cues", []):
             actions.append({
                 "type": "text_title",
@@ -1511,6 +1652,7 @@ def empty_ai_plan(reason, dependencies=None):
         "hook_insert_mode": "",
         "timeline_insert_mode": "",
         "chapters": [],
+        "topics": [],
         "key_point_cues": [],
         "qc_notes": [],
         "actions": [],
@@ -1573,6 +1715,17 @@ def write_ai_assist_files(ai_plan, output_dir):
         f.write(f"key_point_cues: {len(ai_plan.get('key_point_cues', []))}\n")
         f.write(f"qc_notes: {len(ai_plan.get('qc_notes', []))}\n")
         f.write(f"actions: {len(ai_plan.get('actions', []))}\n")
+        f.write(f"topics: {len(ai_plan.get('topics', []))}\n")
+        f.write(
+            "topic_overlay_actions: "
+            f"{sum(1 for action in ai_plan.get('actions', []) if action.get('style') == 'current_topic')}\n"
+        )
+        insertion_results = ai_plan.get("insertion_results", {})
+        if insertion_results:
+            f.write(f"text_titles_expected: {insertion_results.get('expected', 0)}\n")
+            f.write(f"text_titles_inserted: {insertion_results.get('inserted', 0)}\n")
+            f.write(f"topic_titles_expected: {insertion_results.get('topic_expected', 0)}\n")
+            f.write(f"topic_titles_inserted: {insertion_results.get('topic_inserted', 0)}\n")
 
     print(f"✓ AI編集プランを書き出しました: {plan_path}")
     print(f"✓ チャプター草案を書き出しました: {chapters_path}")
@@ -1646,8 +1799,19 @@ def build_ai_assist_plan(source_video_path, working_dir):
             "transcript_path": str(transcript_path),
             "skip_reason": "",
             "dependencies": dependencies,
-            "hook_text": choose_hook_text(segments),
+            "hook_text": (
+                choose_hook_text(segments)
+                if ai_edit_action_enabled("hook_card", False)
+                else ""
+            ),
             "chapters": build_chapters(segments),
+            "topics": build_topic_ranges(
+                segments,
+                target_seconds=ai_edit_action_float("topic_target_seconds", TOPIC_TARGET_SECONDS),
+                min_seconds=ai_edit_action_float("topic_min_seconds", TOPIC_MIN_SECONDS),
+                max_seconds=ai_edit_action_float("topic_max_seconds", TOPIC_MAX_SECONDS),
+                max_topics=ai_edit_action_int("max_topics", TOPIC_MAX_COUNT),
+            ),
             "key_point_cues": build_key_point_cues(segments),
             "qc_notes": build_qc_notes(segments),
             "source_duration": segments[-1]["end"],
@@ -1704,7 +1868,15 @@ def set_fusion_input(tool, name, value):
     except Exception:
         return False
 
-def configure_text_title_item(timeline_item, text, *, size=0.075, color=None, clip_color="Teal"):
+def configure_text_title_item(
+    timeline_item,
+    text,
+    *,
+    size=0.075,
+    color=None,
+    clip_color="Teal",
+    position=None,
+):
     """挿入したText+/Fusionタイトルの表示文言と基本スタイルを設定する"""
     if timeline_item is None:
         return False
@@ -1744,6 +1916,8 @@ def configure_text_title_item(timeline_item, text, *, size=0.075, color=None, cl
     }
     for input_name, value in style_inputs.items():
         set_fusion_input(text_tool, input_name, value)
+    if position is not None:
+        set_fusion_input(text_tool, "Center", {1: float(position[0]), 2: float(position[1])})
 
     if configured:
         print("✓ Text+の文言を設定しました。Resolve上で直接編集できます。")
@@ -1881,7 +2055,18 @@ def insert_editable_hook_card(timeline, start_frame, ai_plan, fps):
     print(f"✓ 編集可能なフックカードをV{TEXT_TITLE_TRACK_INDEX}に追加しました: {hook_frames} frames")
     return 0
 
-def insert_text_title_at_frame(timeline, frame, text, *, fps, seconds, size=0.055, color=None, clip_color="Blue"):
+def insert_text_title_at_frame(
+    timeline,
+    frame,
+    text,
+    *,
+    fps,
+    seconds,
+    size=0.055,
+    color=None,
+    clip_color="Blue",
+    position=None,
+):
     """指定フレームへText+/Fusionタイトルを挿入して、成立する見た目の文言を設定する"""
     if not text:
         return 0
@@ -1907,13 +2092,17 @@ def insert_text_title_at_frame(timeline, frame, text, *, fps, seconds, size=0.05
         print("! Text+タイトルを挿入できませんでした。")
         return 0
 
-    configure_text_title_item(
+    configured = configure_text_title_item(
         timeline_item,
         text,
         size=size,
         color=color,
         clip_color=clip_color,
+        position=position,
     )
+    if not configured:
+        print("! Text+を挿入しましたが、表示文言を設定できませんでした。")
+        return 0
 
     expected_frames = max(1, int(seconds * fps))
     return expected_frames
@@ -1955,6 +2144,13 @@ def text_action_style(action):
         return {"size": 0.052, "color": (1.0, 0.88, 0.42), "clip_color": "Yellow"}
     if style == "section_card":
         return {"size": 0.07, "color": (0.70, 1.0, 0.92), "clip_color": "Teal"}
+    if style == "current_topic":
+        return {
+            "size": 0.038,
+            "color": (0.94, 0.96, 1.0),
+            "clip_color": "Purple",
+            "position": (0.82, 0.88),
+        }
     return {"size": 0.052, "color": (0.92, 0.96, 1.0), "clip_color": "Teal"}
 
 def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_duration_frames, hook_frames=0):
@@ -1962,11 +2158,12 @@ def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_du
     if not ai_plan.get("enabled"):
         reason = ai_plan.get("skip_reason") or "AI assist did not run"
         print(f"! AI補助はスキップされました。理由: {reason}")
-        return
+        return {"expected": 0, "inserted": 0, "topic_expected": 0, "topic_inserted": 0}
 
     source_duration = float(ai_plan.get("source_duration") or 0)
     content_start_frame = start_frame + hook_frames
     added = 0
+    topic_added = 0
 
     def mapped_frame(source_time):
         return map_ai_time_to_timeline_frame(source_time, source_duration, edited_duration_frames, content_start_frame)
@@ -1997,15 +2194,37 @@ def insert_ai_assist_text_objects(timeline, start_frame, ai_plan, fps, edited_du
             size=style["size"],
             color=style["color"],
             clip_color=style["clip_color"],
+            position=style.get("position"),
         )
         if inserted:
             added += 1
+            if action.get("style") == "current_topic":
+                topic_added += 1
 
     qc_count = len(ai_plan.get("qc_notes", []))
     if qc_count:
         print(f"✓ QC確認ポイントは最終映像に出さず、_ai_assist のステータスファイルに残しました: {qc_count}件")
 
-    print(f"✓ AI補助Text+オブジェクトを追加しました: {added}件")
+    topic_expected = sum(1 for action in text_actions if action.get("style") == "current_topic")
+    results = {
+        "expected": len(text_actions),
+        "inserted": added,
+        "topic_expected": topic_expected,
+        "topic_inserted": topic_added,
+    }
+    ai_plan["insertion_results"] = results
+    transcript_path = ai_plan.get("transcript_path")
+    if transcript_path:
+        write_ai_assist_files(ai_plan, Path(transcript_path).parent)
+
+    if topic_expected and topic_added != topic_expected:
+        print(
+            f"✗ 現在トピックText+の追加が未完了です: {topic_added}/{topic_expected}件。"
+            " ai_assist_status.txt を確認してください。"
+        )
+    else:
+        print(f"✓ AI補助Text+オブジェクトを追加しました: {added}/{len(text_actions)}件")
+    return results
 
 def insert_chapter_markers(timeline, start_frame, ai_plan, edited_duration_frames, hook_frames=0):
     """チャプターは映像を押しのけないタイムラインマーカーとして追加する"""
