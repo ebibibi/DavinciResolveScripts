@@ -25,7 +25,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-07-16-persistent-topic-overlay-v1"
+SCRIPT_VERSION = "2026-07-16-persistent-topic-overlay-v2"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -879,10 +879,38 @@ def build_remote_target(host):
         return f"{user}@{host}"
     return host
 
+def canonical_media_stem(value: str) -> str:
+    """ローカル名とSSH転送時の安全化済みファイル名を同じ形へそろえる。"""
+    return sanitize_remote_name(value).lower()
+
+def transcript_name_matches_source(transcript_path: Path, source_video_path: Path) -> bool:
+    """元動画または抽出音声からWhisperが作ったJSON名かを判定する。"""
+    source_stem = canonical_media_stem(source_video_path.stem)
+    transcript_stem = canonical_media_stem(transcript_path.stem)
+    accepted_stems = {
+        source_stem,
+        f"{source_stem}.whisper_audio",
+        f"{source_stem}_whisper_audio",
+    }
+    return transcript_stem in accepted_stems
+
+def is_whisper_transcript_json(path: Path) -> bool:
+    """JSONがWhisperのセグメント配列を持つかを軽量検証する。"""
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return isinstance(data, dict) and isinstance(data.get("segments"), list)
+
 def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
     """Whisperが出力したJSONを、名前揺れを許容して探す"""
     exact_path = output_dir / f"{source_video_path.stem}.json"
-    if exact_path.exists() and (min_mtime is None or exact_path.stat().st_mtime >= min_mtime):
+    if (
+        exact_path.exists()
+        and (min_mtime is None or exact_path.stat().st_mtime >= min_mtime)
+        and is_whisper_transcript_json(exact_path)
+    ):
         return exact_path
 
     ignored_names = {"ai_edit_plan.json"}
@@ -895,8 +923,12 @@ def find_whisper_transcript_path(output_dir, source_video_path, min_mtime=None):
     if not json_files:
         return None
 
-    source_stem = source_video_path.stem.lower()
-    matching_files = [path for path in json_files if source_stem in path.stem.lower()]
+    matching_files = [
+        path
+        for path in json_files
+        if transcript_name_matches_source(path, source_video_path)
+        and is_whisper_transcript_json(path)
+    ]
     if not matching_files:
         print(f"! {source_video_path.name} に対応するWhisper JSONが見つかりません。別動画のJSONは再利用しません。")
         return None
