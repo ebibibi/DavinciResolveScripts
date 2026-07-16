@@ -139,9 +139,22 @@ def test_insertion_result_is_written_to_status_file(tmp_path, monkeypatch) -> No
     inserted = iter([120, 0])
     monkeypatch.setattr(
         EDITOR,
-        "insert_text_title_at_frame",
+        "create_text_title_asset",
+        lambda *args, **kwargs: (object(), object()),
+    )
+    monkeypatch.setattr(
+        EDITOR,
+        "append_text_title_to_track",
         lambda *args, **kwargs: next(inserted),
     )
+
+    class FakeProject:
+        def SetCurrentTimeline(self, _timeline):
+            return True
+
+    class FakeMediaPool:
+        def DeleteTimelines(self, _timelines):
+            return True
 
     result = EDITOR.insert_ai_assist_text_objects(
         object(),
@@ -149,6 +162,8 @@ def test_insertion_result_is_written_to_status_file(tmp_path, monkeypatch) -> No
         plan,
         fps=30,
         edited_duration_frames=240,
+        project=FakeProject(),
+        media_pool=FakeMediaPool(),
     )
 
     assert result == {
