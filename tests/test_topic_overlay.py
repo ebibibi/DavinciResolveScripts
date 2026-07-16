@@ -136,16 +136,21 @@ def test_insertion_result_is_written_to_status_file(tmp_path, monkeypatch) -> No
         "chapters": [],
         "qc_notes": [],
     }
-    inserted = iter([120, 0])
+    inserted = iter([object(), None])
     monkeypatch.setattr(
         EDITOR,
-        "create_text_title_asset",
-        lambda *args, **kwargs: (object(), object()),
+        "find_native_text_title_template",
+        lambda *args, **kwargs: object(),
     )
     monkeypatch.setattr(
         EDITOR,
         "append_text_title_to_track",
         lambda *args, **kwargs: next(inserted),
+    )
+    monkeypatch.setattr(
+        EDITOR,
+        "configure_text_title_item",
+        lambda *args, **kwargs: True,
     )
 
     class FakeProject:
@@ -153,8 +158,7 @@ def test_insertion_result_is_written_to_status_file(tmp_path, monkeypatch) -> No
             return True
 
     class FakeMediaPool:
-        def DeleteTimelines(self, _timelines):
-            return True
+        pass
 
     result = EDITOR.insert_ai_assist_text_objects(
         object(),

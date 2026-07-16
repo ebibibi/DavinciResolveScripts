@@ -24,8 +24,9 @@ import textwrap
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-SCRIPT_VERSION = "2026-07-16-persistent-topic-overlay-v3"
+SCRIPT_VERSION = "2026-07-16-persistent-topic-overlay-v4"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -84,6 +85,8 @@ TOPIC_OVERLAY_REFRESH_SECONDS = 4.0
 TOPIC_MAX_COUNT = 30
 TEXT_TITLE_TRACK_INDEX = 2
 TEXT_TITLE_FONT = "HGPSoeiKakugothicUB"
+TEXT_TITLE_FONT_STYLE = "Regular"
+TEXT_TITLE_TEMPLATE_NAMES = ("テロップ", "Text+")
 CHAPTER_INTERVAL_SECONDS = 180
 DEFAULT_OP_CLIP_NAME = "01_EBI_CHAN_OP"
 DEFAULT_ENDING_CLIP_NAME = "03_EBI_CHAN_IN.mov"
@@ -1911,14 +1914,14 @@ def get_fusion_input(tool, name):
         return None
 
 def configure_text_title_item(
-    timeline_item,
-    text,
+    timeline_item: Any,
+    text: str,
     *,
-    size=0.075,
-    color=None,
-    clip_color="Teal",
-    position=None,
-):
+    size: float = 0.075,
+    color: tuple[float, float, float] | None = None,
+    clip_color: str = "Teal",
+    position: tuple[float, float] | None = None,
+) -> bool:
     """挿入したText+/Fusionタイトルの表示文言と基本スタイルを設定する"""
     if timeline_item is None:
         return False
@@ -1949,6 +1952,7 @@ def configure_text_title_item(
 
     style_inputs = {
         "Size": size,
+        "Style": TEXT_TITLE_FONT_STYLE,
         "Font": TEXT_TITLE_FONT,
         "Red1": red,
         "Green1": green,
@@ -1962,20 +1966,23 @@ def configure_text_title_item(
         set_fusion_input(text_tool, "Center", {1: float(position[0]), 2: float(position[1])})
 
     actual_font = get_fusion_input(text_tool, "Font")
+    actual_style = get_fusion_input(text_tool, "Style")
     font_configured = str(actual_font or "").strip() == TEXT_TITLE_FONT
-    if not font_configured:
+    style_configured = str(actual_style or "").strip() == TEXT_TITLE_FONT_STYLE
+    if not font_configured or not style_configured:
         print(
             f"✗ Text+フォント設定に失敗しました: "
-            f"requested={TEXT_TITLE_FONT}, actual={actual_font or 'NOT SET'}"
+            f"requested={TEXT_TITLE_FONT} {TEXT_TITLE_FONT_STYLE}, "
+            f"actual={actual_font or 'NOT SET'} {actual_style or 'NOT SET'}"
         )
         return False
 
     if configured:
         print(
             "✓ Text+の文言とフォントを設定しました: "
-            f"font={TEXT_TITLE_FONT}"
+            f"font={TEXT_TITLE_FONT}, style={TEXT_TITLE_FONT_STYLE}"
         )
-    return configured and font_configured
+    return configured and font_configured and style_configured
 
 def ensure_video_track(timeline, track_index):
     """指定したビデオトラックが存在するように追加する"""
@@ -1988,34 +1995,75 @@ def ensure_video_track(timeline, track_index):
         print(f"! V{track_index}トラック準備でエラー: {e}")
         return False
 
-def insert_title_with_variants(timeline, title_variants):
-    """利用可能なTitle挿入APIを順に試す"""
-    for insert_method, title_name in title_variants:
-        method = getattr(timeline, insert_method, None)
-        if not method:
-            continue
+def as_object_list(value: Any) -> list[Any]:
+    """Resolve APIがlist/dictのどちらを返してもリスト化する。"""
+    if isinstance(value, dict):
+        return list(value.values())
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return []
+
+def media_pool_item_name(item: Any) -> str:
+    """Media Pool素材の名前をAPI差分に耐えて取得する。"""
+    try:
+        name = item.GetName()
+        if name:
+            return str(name)
+    except Exception:
+        pass
+    try:
+        properties = item.GetClipProperty()
+        return str(properties.get("Clip Name") or "")
+    except Exception:
+        return ""
+
+def find_native_text_title_template(media_pool: Any) -> Any | None:
+    """同梱プロジェクトのネイティブText+素材を再帰検索する。"""
+    try:
+        root_folder = media_pool.GetRootFolder()
+    except Exception as error:
+        print(f"✗ Media Poolのルートを取得できませんでした: {error}")
+        return None
+
+    pending_folders = [root_folder]
+    while pending_folders:
+        folder = pending_folders.pop()
         try:
-            timeline_item = method(title_name)
-        except Exception as e:
-            print(f"! {insert_method}({title_name}) 失敗: {e}")
-            timeline_item = None
-        if timeline_item:
-            return timeline_item
+            clips = as_object_list(folder.GetClipList())
+        except Exception:
+            try:
+                clips = as_object_list(folder.GetClips())
+            except Exception:
+                clips = []
+        for template_name in TEXT_TITLE_TEMPLATE_NAMES:
+            for clip in clips:
+                if media_pool_item_name(clip) == template_name:
+                    print(f"✓ ネイティブText+テンプレートを使用します: {template_name}")
+                    return clip
+        try:
+            pending_folders.extend(as_object_list(folder.GetSubFolderList()))
+        except Exception:
+            pass
+
+    print(
+        "✗ ネイティブText+テンプレートがMedia Poolにありません: "
+        + ", ".join(TEXT_TITLE_TEMPLATE_NAMES)
+    )
     return None
 
 def append_text_title_to_track(
-    media_pool,
-    timeline,
-    media_item,
+    media_pool: Any,
+    timeline: Any,
+    media_item: Any,
     *,
-    frame,
-    fps,
-    seconds,
-    target_track_index=TEXT_TITLE_TRACK_INDEX,
-):
+    frame: int,
+    fps: float,
+    seconds: float,
+    target_track_index: int = TEXT_TITLE_TRACK_INDEX,
+) -> Any | None:
     """Media Poolのタイトルを指定ビデオトラックへ非リップル配置する。"""
     if not ensure_video_track(timeline, target_track_index):
-        return 0
+        return None
 
     expected_frames = max(1, int(float(seconds) * int(fps)))
     clip_info = {
@@ -2030,10 +2078,10 @@ def append_text_title_to_track(
         result = media_pool.AppendToTimeline([clip_info])
     except Exception as error:
         print(f"✗ V{target_track_index}へのText+追加に失敗しました: {error}")
-        return 0
+        return None
     if not result:
         print(f"✗ V{target_track_index}へのText+追加に失敗しました。")
-        return 0
+        return None
 
     if isinstance(result, dict):
         timeline_item = next(iter(result.values()), None)
@@ -2049,7 +2097,7 @@ def append_text_title_to_track(
                 timeline.DeleteClips([timeline_item], False)
             except Exception as error:
                 print(f"✗ 未検証Text+の削除にも失敗しました: {error}")
-        return 0
+        return None
     try:
         track_type, actual_track_index = timeline_item.GetTrackTypeAndIndex()
     except Exception as error:
@@ -2058,7 +2106,7 @@ def append_text_title_to_track(
             timeline.DeleteClips([timeline_item], False)
         except Exception as delete_error:
             print(f"✗ 未検証Text+の削除にも失敗しました: {delete_error}")
-        return 0
+        return None
 
     if track_type != "video" or int(actual_track_index) != int(target_track_index):
         print(
@@ -2069,87 +2117,9 @@ def append_text_title_to_track(
             timeline.DeleteClips([timeline_item], False)
         except Exception as error:
             print(f"✗ 誤配置Text+の削除にも失敗しました: {error}")
-        return 0
+        return None
 
-    return expected_frames
-
-def create_text_title_asset(
-    project,
-    media_pool,
-    main_timeline,
-    text,
-    style,
-    asset_name,
-):
-    """一時タイムライン上でText+を複合クリップ化し、V2配置用素材を作る。"""
-    factory_timeline = None
-    try:
-        factory_timeline = media_pool.CreateEmptyTimeline(asset_name)
-        if not factory_timeline:
-            print(f"✗ Text+作成用タイムラインを作れませんでした: {asset_name}")
-            return None, None
-        if not project.SetCurrentTimeline(factory_timeline):
-            print(f"✗ Text+作成用タイムラインを開けませんでした: {asset_name}")
-            return None, factory_timeline
-
-        title_item = insert_title_with_variants(
-            factory_timeline,
-            (
-                ("InsertFusionTitleIntoTimeline", "Text+"),
-                ("InsertTitleIntoTimeline", "Text+"),
-                ("InsertTitleIntoTimeline", "Text"),
-            ),
-        )
-        if not title_item:
-            print(f"✗ 一時タイムラインへText+を作成できませんでした: {asset_name}")
-            return None, factory_timeline
-
-        if not configure_text_title_item(
-            title_item,
-            text,
-            size=style["size"],
-            color=style["color"],
-            clip_color=style["clip_color"],
-            position=style.get("position"),
-        ):
-            return None, factory_timeline
-
-        try:
-            compound_item = factory_timeline.CreateCompoundClip(
-                [title_item],
-                {"name": asset_name},
-            )
-        except Exception as error:
-            print(f"✗ Text+の複合クリップ化に失敗しました: {error}")
-            return None, factory_timeline
-        if not compound_item or not hasattr(compound_item, "GetMediaPoolItem"):
-            print("✗ Text+複合クリップのMedia Pool素材を取得できませんでした。")
-            return None, factory_timeline
-
-        media_item = compound_item.GetMediaPoolItem()
-        if not media_item:
-            print("✗ Text+複合クリップがMedia Poolに作成されませんでした。")
-            return None, factory_timeline
-        return media_item, factory_timeline
-    finally:
-        try:
-            project.SetCurrentTimeline(main_timeline)
-        except Exception as error:
-            print(f"✗ mainタイムラインへの復帰に失敗しました: {error}")
-
-def delete_title_factory_timelines(media_pool, timelines):
-    """Text+素材作成に使った一時タイムラインを削除する。"""
-    timelines = [timeline for timeline in timelines if timeline is not None]
-    if not timelines:
-        return True
-    try:
-        deleted = media_pool.DeleteTimelines(timelines)
-    except Exception as error:
-        print(f"! Text+作成用タイムラインの削除に失敗しました: {error}")
-        return False
-    if not deleted:
-        print("! Text+作成用タイムラインを削除できませんでした。")
-    return bool(deleted)
+    return timeline_item
 
 def map_source_time_to_edited_frame(source_seconds, source_duration, edited_duration_frames):
     """元動画時間をauto-editor後タイムラインの近似フレームへ変換"""
@@ -2238,8 +2208,8 @@ def insert_ai_assist_text_objects(
                 "text": build_key_point_title_text(cue),
             })
 
-    if project is None or media_pool is None:
-        print("✗ V2配置に必要なProjectまたはMedia Poolがありません。Text+を追加しません。")
+    if media_pool is None:
+        print("✗ V2配置に必要なMedia Poolがありません。Text+を追加しません。")
         topic_expected = sum(
             1 for action in text_actions if action.get("style") == "current_topic"
         )
@@ -2255,62 +2225,48 @@ def insert_ai_assist_text_objects(
             write_ai_assist_files(ai_plan, Path(transcript_path).parent)
         return results
 
-    asset_cache = {}
-    factory_timelines = []
-    try:
-        for index, action in enumerate(text_actions, start=1):
+    title_template = find_native_text_title_template(media_pool)
+    if title_template is not None:
+        for action in text_actions:
             frame = mapped_frame(float(action.get("time", 0)))
             style = text_action_style(action)
-            asset_key = json.dumps(
-                {
-                    "text": action.get("text", ""),
-                    "style": style,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            )
-            if asset_key not in asset_cache:
-                asset_name = f"AI Topic {index:03d} {int(time.time())}"
-                media_item, factory_timeline = create_text_title_asset(
-                    project,
-                    media_pool,
-                    timeline,
-                    action.get("text", ""),
-                    style,
-                    asset_name,
-                )
-                asset_cache[asset_key] = media_item
-                if factory_timeline is not None:
-                    factory_timelines.append(factory_timeline)
-
-            media_item = asset_cache.get(asset_key)
-            if media_item is None:
-                continue
-            try:
-                project.SetCurrentTimeline(timeline)
-            except Exception as error:
-                print(f"✗ mainタイムラインを選択できませんでした: {error}")
-                continue
-            inserted = append_text_title_to_track(
+            timeline_item = append_text_title_to_track(
                 media_pool,
                 timeline,
-                media_item,
+                title_template,
                 frame=frame,
                 fps=fps,
                 seconds=float(action.get("duration") or 3),
                 target_track_index=TEXT_TITLE_TRACK_INDEX,
             )
-            if inserted:
-                added += 1
-                if action.get("style") == "current_topic":
-                    topic_added += 1
-    finally:
+            if timeline_item is None:
+                continue
+
+            configured = configure_text_title_item(
+                timeline_item,
+                action.get("text", ""),
+                size=style["size"],
+                color=style["color"],
+                clip_color=style["clip_color"],
+                position=style.get("position"),
+            )
+            if not configured:
+                print("✗ 無効なText+をV2から削除します。")
+                try:
+                    timeline.DeleteClips([timeline_item], False)
+                except Exception as error:
+                    print(f"✗ 無効なText+の削除にも失敗しました: {error}")
+                continue
+
+            added += 1
+            if action.get("style") == "current_topic":
+                topic_added += 1
+
+    if project is not None:
         try:
             project.SetCurrentTimeline(timeline)
         except Exception:
             pass
-        if media_pool is not None:
-            delete_title_factory_timelines(media_pool, factory_timelines)
 
     qc_count = len(ai_plan.get("qc_notes", []))
     if qc_count:
