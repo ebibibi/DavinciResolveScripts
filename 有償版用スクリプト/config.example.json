@@ -26,6 +26,7 @@
     "chapter_titles": false,
     "hook_card": false,
     "current_topic_overlay": true,
+    "viewer_focused_topic_labels": true,
     "key_point_titles": false,
     "combine_legacy_titles": false,
     "topic_target_seconds": 45,

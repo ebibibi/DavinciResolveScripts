@@ -1,6 +1,8 @@
 import importlib.util
+import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 
 os.environ["DAVINCI_GIT_PULL_DONE"] = "1"
@@ -41,8 +43,8 @@ def test_build_topic_ranges_covers_transcript_without_overlap() -> None:
     assert topics[0]["end"] == topics[1]["start"]
     assert topics[-1]["end"] == 92
     assert all(topic["label"] for topic in topics)
-    assert "Claude" in topics[0]["label"]
-    assert "MCP" in topics[1]["label"]
+    assert "構成" in topics[0]["label"]
+    assert "違い" in topics[1]["label"]
 
 
 def test_short_final_topic_is_merged_into_previous_topic() -> None:
@@ -77,7 +79,7 @@ def test_topic_overlay_actions_fill_every_topic_range() -> None:
         "style": "current_topic",
         "time": 0.0,
         "duration": 4.0,
-        "text": "いまの話題\nスキルの構造",
+        "text": "スキルの構造",
     }
     assert actions[-1]["time"] == 14.0
     for topic in topics:
@@ -92,13 +94,52 @@ def test_topic_overlay_actions_fill_every_topic_range() -> None:
             assert left["time"] + left["duration"] == right["time"]
 
 
-def test_current_topic_style_is_small_and_at_top_right() -> None:
+def test_current_topic_style_is_small_left_aligned_and_away_from_presenter() -> None:
     style = EDITOR.text_action_style({"style": "current_topic"})
 
-    assert style["size"] < 0.05
-    assert style["position"][0] > 0.5
+    assert style["size"] < 0.03
+    assert style["position"][0] < 0.2
     assert style["position"][1] > 0.5
+    assert style["horizontal_justification"] == -1
     assert style["clip_color"] == "Purple"
+
+
+def test_topic_label_describes_viewer_benefit_instead_of_generic_keyword() -> None:
+    label = EDITOR.topic_label_from_segments([
+        segment(0, 12, "AIについて紹介します"),
+        segment(12, 28, "AIが前回の作業内容を覚えて続きから再開できる仕組みです"),
+    ])
+
+    assert label.lower() != "ai"
+    assert "前回" in label
+    assert "覚えて" in label or "再開" in label
+
+
+def test_claude_labels_replace_fallback_with_viewer_focused_statement(monkeypatch) -> None:
+    topics = [{
+        "start": 0.0,
+        "end": 45.0,
+        "label": "AI",
+        "source_text": "AIが前回の作業を覚えて、昨日の続きから再開できます",
+    }]
+    response = {
+        "structured_output": {
+            "topics": [{"index": 0, "label": "AIが前回の作業を覚える仕組み"}],
+        },
+    }
+    monkeypatch.setattr(EDITOR.shutil, "which", lambda _name: "claude")
+    monkeypatch.setattr(
+        EDITOR.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            stdout=json.dumps(response, ensure_ascii=False),
+            stderr="",
+        ),
+    )
+
+    result = EDITOR.add_viewer_focused_topic_labels(topics)
+
+    assert result[0]["label"] == "AIが前回の作業を覚える仕組み"
 
 
 def test_default_actions_use_topic_overlay_instead_of_hook_or_key_points(monkeypatch) -> None:
