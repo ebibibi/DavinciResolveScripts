@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-SCRIPT_VERSION = "2026-07-17-viewer-focused-topic-overlay-v5"
+SCRIPT_VERSION = "2026-07-17-auto-editor-empty-timeline-fallback-v6"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -471,37 +471,57 @@ def make_unique_name(pm, base_name: str) -> str:
 def run_auto_editor(working_dir):
     """auto-editorを実行"""
     print("auto-editorを実行中...")
-    os.chdir(working_dir)
-    
+
     # 最新の .mkv / .mp4 ファイルを取得
-    video_files = glob.glob("*.mkv") + glob.glob("*.mp4")
+    video_files = (
+        glob.glob(os.path.join(working_dir, "*.mkv"))
+        + glob.glob(os.path.join(working_dir, "*.mp4"))
+    )
     if not video_files:
         print("✗ mkv/mp4ファイルが見つかりません")
         return False
 
     latest_file = max(video_files, key=os.path.getmtime)
-    latest_path = Path(working_dir) / latest_file
-    print(f"✓ 処理対象ファイル: {latest_file}")
-    
-    command = [
-        "auto-editor",
-        str(latest_path),
-        "--margin", "0.5sec",
-        "--edit", "audio:threshold=1%",
-        "--export", "resolve"
-    ]
-    
-    print("実行コマンド:", " ".join(command))
-    
+    latest_path = Path(latest_file)
+    print(f"✓ 処理対象ファイル: {latest_path.name}")
+
+    def command_for(edit_method):
+        command = ["auto-editor", str(latest_path)]
+        if edit_method != "none":
+            command.extend(["--margin", "0.5sec"])
+        command.extend(["--edit", edit_method, "--export", "resolve"])
+        return command
+
+    command = command_for("audio:threshold=1%")
+    print("実行コマンド:", format_command_for_log(command))
+
     try:
-        result = run_text_subprocess(command, check=True)
+        result = run_text_subprocess(command, check=True, cwd=working_dir)
         print("✓ auto-editor実行成功")
         print(result.stdout)
         return latest_path
     except subprocess.CalledProcessError as e:
-        print(f"✗ auto-editor実行失敗: {e}")
-        print(f"エラー出力: {e.stderr}")
-        return False
+        error_text = f"{e.stdout or ''}\n{e.stderr or ''}"
+        if "Timeline is empty" not in error_text:
+            print(f"✗ auto-editor実行失敗: {e}")
+            print(f"エラー出力: {e.stderr}")
+            return False
+
+        print(
+            "! 音声から残す区間を検出できませんでした。"
+            "録画全体を残すResolve XMLとして再試行します。"
+        )
+        fallback_command = command_for("none")
+        print("再試行コマンド:", format_command_for_log(fallback_command))
+        try:
+            result = run_text_subprocess(fallback_command, check=True, cwd=working_dir)
+            print("✓ 無音カットなしのauto-editor再試行に成功")
+            print(result.stdout)
+            return latest_path
+        except subprocess.CalledProcessError as fallback_error:
+            print(f"✗ 無音カットなしのauto-editor再試行も失敗: {fallback_error}")
+            print(f"エラー出力: {fallback_error.stderr}")
+            return False
     except FileNotFoundError:
         print("✗ auto-editorが見つかりません")
         return None
@@ -845,7 +865,7 @@ def format_command_for_log(command):
     """実行コマンドをログ用に安全に整形する"""
     return " ".join(shlex.quote(str(part)) for part in command)
 
-def run_text_subprocess(command, check=True):
+def run_text_subprocess(command, check=True, cwd=None):
     """Windowsの既定cp932に依存せず、UTF-8出力を安全に捕捉する"""
     return subprocess.run(
         command,
@@ -854,6 +874,7 @@ def run_text_subprocess(command, check=True):
         encoding="utf-8",
         errors="replace",
         check=check,
+        cwd=cwd,
     )
 
 def build_remote_client_command(kind):
