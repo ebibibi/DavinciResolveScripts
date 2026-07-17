@@ -21,12 +21,11 @@ import re
 import shlex
 import shutil
 import textwrap
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-SCRIPT_VERSION = "2026-07-16-persistent-topic-overlay-v4"
+SCRIPT_VERSION = "2026-07-17-viewer-focused-topic-overlay-v5"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -1400,47 +1399,150 @@ def build_caption_cues(segments):
             break
     return cues
 
-def topic_label_from_segments(segments: list[dict], max_chars: int = 24) -> str:
-    """話題ブロック内で繰り返される用語から短い表示名を作る。"""
-    term_counts: Counter[str] = Counter()
-    first_positions = {}
-    for segment_index, segment in enumerate(segments):
-        for term_index, term in enumerate(extract_terms_from_text(segment.get("text", ""))):
-            normalized = normalize_term(term)
-            if not normalized:
-                continue
-            key = normalized.lower()
-            term_counts[key] += 1
-            first_positions.setdefault(key, (segment_index, term_index, normalized))
-
-    ranked_keys = sorted(
-        term_counts,
-        key=lambda key: (
-            -term_counts[key],
-            first_positions[key][0],
-            first_positions[key][1],
-        ),
+def topic_label_from_segments(segments: list[dict], max_chars: int = 30) -> str:
+    """視聴者が区間の内容を理解できる、具体的な一文を選ぶ。"""
+    benefit_words = (
+        "方法", "仕組み", "理由", "違い", "使い方", "できる", "覚える",
+        "復元", "追加", "作る", "比較", "解決", "防ぐ", "確認", "わかる",
     )
-    selected = []
-    for key in ranked_keys:
-        candidate = first_positions[key][2]
-        if any(candidate.lower() in item.lower() or item.lower() in candidate.lower() for item in selected):
+    candidates = []
+    for index, segment in enumerate(segments):
+        text = clean_text(segment.get("text", ""))
+        text = re.sub(r"^(今回は|ここでは|今から|まず|次に|続いて|最後に)[、,\s]*", "", text)
+        text = re.sub(
+            r"(?:について)?(?:説明|紹介|解説)(?:していき)?ます[。.]?$",
+            "を解説",
+            text,
+        )
+        text = re.sub(
+            r"(確認|比較|設定|利用|実行|作成|追加|復元|連携|検証)します[。.]?$",
+            r"\1",
+            text,
+        )
+        text = re.sub(r"します[。.]?$", "", text)
+        text = re.sub(r"(?:して)?いきます[。.]?$", "", text)
+        text = re.sub(r"(?:です|ます)[。.]?$", "", text)
+        text = text.strip("、。,.!? ")
+        if len(text) < 8:
             continue
-        proposed = " / ".join(selected + [candidate])
-        if len(proposed) > max_chars:
-            continue
-        selected.append(candidate)
-        if len(selected) >= 2:
-            break
-    if selected:
-        return " / ".join(selected)
+        score = sum(3 for word in benefit_words if word in text)
+        if 12 <= len(text) <= 38:
+            score += 4
+        elif len(text) <= 55:
+            score += 2
+        if re.search(r"[をがにでとのは]", text):
+            score += 1
+        score -= index * 0.01
+        candidates.append((score, text))
 
-    representative = next(
-        (clean_text(segment.get("text", "")) for segment in segments if segment_is_useful(segment)),
-        "",
+    if candidates:
+        return shorten_text(max(candidates, key=lambda item: item[0])[1], max_chars)
+
+    terms = []
+    for segment in segments:
+        terms.extend(extract_terms_from_text(segment.get("text", "")))
+    informative_term = next((term for term in unique_keep_order(terms) if len(term) >= 4), "")
+    return shorten_text(informative_term, max_chars) or "内容を確認中"
+
+def viewer_topic_label_schema() -> dict:
+    """Claude CLIへ要求する構造化出力スキーマ。"""
+    return {
+        "type": "object",
+        "properties": {
+            "topics": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "index": {"type": "integer"},
+                        "label": {"type": "string"},
+                    },
+                    "required": ["index", "label"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["topics"],
+        "additionalProperties": False,
+    }
+
+def parse_viewer_topic_labels(output: str) -> dict[int, str]:
+    """Claude CLIのJSONラッパーから検証済みラベルを取り出す。"""
+    payload = json.loads(output)
+    data = payload.get("structured_output", payload)
+    if not isinstance(data, dict) or "topics" not in data:
+        result = payload.get("result") if isinstance(payload, dict) else None
+        if isinstance(result, str):
+            data = json.loads(result)
+    labels = {}
+    for item in data.get("topics", []) if isinstance(data, dict) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("index"), int):
+            continue
+        label = clean_text(item.get("label", "")).strip("「」『』、。,.!? ")
+        label = re.sub(r"^(いまの話題|現在の話題)\s*[:：-]?\s*", "", label)
+        if 8 <= len(label) <= 34 and label.lower() not in {"ai", "claude", "codex", "トピック"}:
+            labels[int(item["index"])] = label
+    return labels
+
+def add_viewer_focused_topic_labels(topics: list[dict]) -> list[dict]:
+    """全区間を一度だけClaudeへ渡し、視聴者向けの表示文へ置き換える。"""
+    if not topics or not ai_edit_action_enabled("viewer_focused_topic_labels", True):
+        return topics
+    claude_command = shutil.which("claude")
+    if not claude_command:
+        print("! Claude CLIがないため、現在トピックはローカル要約を使用します。")
+        return topics
+
+    topic_inputs = [
+        {
+            "index": index,
+            "transcript": topic.get("source_text", ""),
+            "fallback": topic.get("label", ""),
+        }
+        for index, topic in enumerate(topics)
+    ]
+    prompt = (
+        "あなたはYouTube動画の編集者です。次の文字起こし区間ごとに、視聴者が"
+        "『いま何が分かるのか』を一目で理解できる表示文を作ってください。\n"
+        "条件:\n"
+        "- 8〜30文字程度の具体的な日本語1文\n"
+        "- 単なる頻出語や『AI』『Claude』だけは禁止\n"
+        "- 『いまの話題』『〜について』などの見出し語は禁止\n"
+        "- 機能、疑問、利点、違い、手順のどれかを言い切る\n"
+        "- 文字起こしにない内容を足さない\n"
+        "- 宣伝口調や煽り表現にしない\n\n"
+        f"入力:\n{json.dumps(topic_inputs, ensure_ascii=False)}"
     )
-    representative = re.sub(r"^(今回は|ここでは|次に|続いて|最後に)", "", representative)
-    return shorten_text(representative, max_chars) or "トピック"
+    command = [
+        claude_command,
+        "--print",
+        "--output-format", "json",
+        "--json-schema", json.dumps(viewer_topic_label_schema(), ensure_ascii=False),
+        "--no-session-persistence",
+        "--permission-mode", "dontAsk",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            input=prompt,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+            check=True,
+        )
+        labels = parse_viewer_topic_labels(result.stdout)
+    except (subprocess.SubprocessError, ValueError, json.JSONDecodeError) as error:
+        print(f"! 視聴者向け話題文のAI生成に失敗しました。ローカル要約を使用します: {error}")
+        return topics
+
+    for index, label in labels.items():
+        if 0 <= index < len(topics):
+            topics[index]["label"] = label
+    print(f"✓ 視聴者向けの現在トピック文を生成しました: {len(labels)}/{len(topics)}件")
+    return topics
 
 def build_topic_ranges(
     segments: list[dict],
@@ -1489,7 +1591,7 @@ def build_topic_ranges(
             "start": start,
             "end": max(start + 1.0, end),
             "label": topic_label_from_segments(block),
-            "source_text": shorten_text(" ".join(item["text"] for item in block), 120),
+            "source_text": shorten_text(" ".join(item["text"] for item in block), 700),
         })
     return topics
 
@@ -1504,7 +1606,8 @@ def build_topic_overlay_actions(
     for topic in topics:
         start = float(topic.get("start", 0))
         end = max(start, float(topic.get("end", start)))
-        label = shorten_text(topic.get("label", ""), 28)
+        label = shorten_text(topic.get("label", ""), 34)
+        display_text = wrap_hook_text_for_title(label, width=17, max_lines=2)
         cursor = start
         while cursor < end:
             duration = min(refresh_seconds, end - cursor)
@@ -1513,7 +1616,7 @@ def build_topic_overlay_actions(
                 "style": "current_topic",
                 "time": cursor,
                 "duration": duration,
-                "text": f"いまの話題\n{label}",
+                "text": display_text,
             })
             cursor += duration
     return actions
@@ -1828,6 +1931,15 @@ def build_ai_assist_plan(source_video_path, working_dir):
             write_ai_assist_files(ai_plan, output_dir)
             return ai_plan
 
+        topics = build_topic_ranges(
+            segments,
+            target_seconds=ai_edit_action_float("topic_target_seconds", TOPIC_TARGET_SECONDS),
+            min_seconds=ai_edit_action_float("topic_min_seconds", TOPIC_MIN_SECONDS),
+            max_seconds=ai_edit_action_float("topic_max_seconds", TOPIC_MAX_SECONDS),
+            max_topics=ai_edit_action_int("max_topics", TOPIC_MAX_COUNT),
+        )
+        if ai_edit_action_enabled("current_topic_overlay", True):
+            topics = add_viewer_focused_topic_labels(topics)
         ai_plan = {
             "enabled": True,
             "script_version": SCRIPT_VERSION,
@@ -1841,13 +1953,7 @@ def build_ai_assist_plan(source_video_path, working_dir):
                 else ""
             ),
             "chapters": build_chapters(segments),
-            "topics": build_topic_ranges(
-                segments,
-                target_seconds=ai_edit_action_float("topic_target_seconds", TOPIC_TARGET_SECONDS),
-                min_seconds=ai_edit_action_float("topic_min_seconds", TOPIC_MIN_SECONDS),
-                max_seconds=ai_edit_action_float("topic_max_seconds", TOPIC_MAX_SECONDS),
-                max_topics=ai_edit_action_int("max_topics", TOPIC_MAX_COUNT),
-            ),
+            "topics": topics,
             "key_point_cues": build_key_point_cues(segments),
             "qc_notes": build_qc_notes(segments),
             "source_duration": segments[-1]["end"],
@@ -1921,6 +2027,7 @@ def configure_text_title_item(
     color: tuple[float, float, float] | None = None,
     clip_color: str = "Teal",
     position: tuple[float, float] | None = None,
+    horizontal_justification: int = 1,
 ) -> bool:
     """挿入したText+/Fusionタイトルの表示文言と基本スタイルを設定する"""
     if timeline_item is None:
@@ -1957,7 +2064,7 @@ def configure_text_title_item(
         "Red1": red,
         "Green1": green,
         "Blue1": blue,
-        "HorizontalJustification": 1,
+        "HorizontalJustification": horizontal_justification,
         "VerticalJustification": 1,
     }
     for input_name, value in style_inputs.items():
@@ -2162,10 +2269,11 @@ def text_action_style(action):
         return {"size": 0.075, "color": (0.92, 0.96, 1.0), "clip_color": "Teal"}
     if style == "current_topic":
         return {
-            "size": 0.038,
+            "size": 0.028,
             "color": (0.94, 0.96, 1.0),
             "clip_color": "Purple",
-            "position": (0.82, 0.88),
+            "position": (0.06, 0.92),
+            "horizontal_justification": -1,
         }
     return {"size": 0.052, "color": (0.92, 0.96, 1.0), "clip_color": "Teal"}
 
@@ -2249,6 +2357,7 @@ def insert_ai_assist_text_objects(
                 color=style["color"],
                 clip_color=style["clip_color"],
                 position=style.get("position"),
+                horizontal_justification=style.get("horizontal_justification", 1),
             )
             if not configured:
                 print("✗ 無効なText+をV2から削除します。")

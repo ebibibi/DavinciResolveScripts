@@ -306,14 +306,14 @@ def test_ai_text_pipeline_appends_native_text_plus_template_only_to_v2() -> None
                 "style": "current_topic",
                 "time": 0.0,
                 "duration": 4.0,
-                "text": "いまの話題\nV2配置",
+                "text": "V2へ安全に配置する方法",
             },
             {
                 "type": "text_title",
                 "style": "current_topic",
                 "time": 4.0,
                 "duration": 4.0,
-                "text": "いまの話題\nV2配置",
+                "text": "V2へ安全に配置する方法",
             },
         ],
         "qc_notes": [],
@@ -335,7 +335,14 @@ def test_ai_text_pipeline_appends_native_text_plus_template_only_to_v2() -> None
     assert all(info["trackIndex"] == 2 for info in media_pool.clip_infos)
     assert all(item.comp.tool.inputs["Font"] == "HGPSoeiKakugothicUB" for item in media_pool.appended_items)
     assert all(item.comp.tool.inputs["Style"] == "Regular" for item in media_pool.appended_items)
-    assert all(item.comp.tool.inputs["StyledText"] == "いまの話題\nV2配置" for item in media_pool.appended_items)
+    assert all(
+        item.comp.tool.inputs["HorizontalJustification"] == -1
+        for item in media_pool.appended_items
+    )
+    assert all(
+        item.comp.tool.inputs["StyledText"] == "V2へ安全に配置する方法"
+        for item in media_pool.appended_items
+    )
 
 
 def test_ai_text_pipeline_deletes_native_title_when_font_validation_fails(
