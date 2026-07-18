@@ -25,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-SCRIPT_VERSION = "2026-07-17-auto-editor-empty-timeline-fallback-v6"
+SCRIPT_VERSION = "2026-07-18-post-cut-ai-titles-v7"
 GIT_PULL_DONE_ENV = "DAVINCI_GIT_PULL_DONE"
 
 def update_repository_before_start():
@@ -101,6 +101,12 @@ DEFAULT_REMOTE_WHISPER_MODEL = "turbo"
 DEFAULT_REMOTE_WHISPER_BEAM_SIZE = 1
 DEFAULT_REMOTE_WHISPER_BEST_OF = 1
 DEFAULT_REMOTE_WHISPER_VERBOSE = False
+DEFAULT_POST_CUT_TITLES_ENABLED = True
+DEFAULT_CUT_MASTER_VIDEO_BITRATE = "40M"
+DEFAULT_POST_CUT_FINAL_CRF = 16
+DEFAULT_POST_CUT_MAX_TITLES = 12
+DEFAULT_POST_CUT_MIN_GAP_SECONDS = 10.0
+DEFAULT_POST_CUT_FONT_SIZE = 74
 KEY_CUE_PHRASES = [
     "重要",
     "ポイント",
@@ -257,6 +263,23 @@ def configured_section_list(env_name, section_key, value_key):
     if isinstance(value, str) and value.strip():
         return shlex.split(value)
     return []
+
+def post_cut_title_value(env_name, value_key, default_value):
+    """post_cut_ai_titlesセクションの値を取得する。"""
+    return configured_section_value(
+        env_name,
+        "post_cut_ai_titles",
+        value_key,
+        default_value,
+    )
+
+def post_cut_titles_enabled():
+    """自動カット後の外部AIテロップ処理を有効にするか返す。"""
+    return configured_bool(post_cut_title_value(
+        "DAVINCI_POST_CUT_AI_TITLES",
+        "enabled",
+        DEFAULT_POST_CUT_TITLES_ENABLED,
+    ), DEFAULT_POST_CUT_TITLES_ENABLED)
 
 def configured_bool(value, default_value=False):
     """設定値をboolへ変換"""
@@ -525,6 +548,78 @@ def run_auto_editor(working_dir):
     except FileNotFoundError:
         print("✗ auto-editorが見つかりません")
         return None
+
+def build_cut_master_command(
+    source_path: Path,
+    output_path: Path,
+    *,
+    edit_method: str,
+) -> list[str]:
+    """Resolve XMLと同じ無音判定で高品質カット済み動画を作るコマンド。"""
+    command = ["auto-editor", str(source_path)]
+    if edit_method != "none":
+        command.extend(["--margin", "0.5sec"])
+    command.extend([
+        "--edit", edit_method,
+        "--video-codec", "h264",
+        "--audio-codec", "aac",
+        "--video-bitrate", str(post_cut_title_value(
+            "DAVINCI_CUT_MASTER_VIDEO_BITRATE",
+            "cut_master_video_bitrate",
+            DEFAULT_CUT_MASTER_VIDEO_BITRATE,
+        )),
+        "--audio-bitrate", str(post_cut_title_value(
+            "DAVINCI_CUT_MASTER_AUDIO_BITRATE",
+            "cut_master_audio_bitrate",
+            "320k",
+        )),
+        "-o", str(output_path),
+    ])
+    return command
+
+def render_cut_master(source_path: Path, working_dir: str) -> Path | None:
+    """auto-editorの完成済み自動カットを高品質な単一動画へレンダリングする。"""
+    output_dir = source_ai_assist_dir(working_dir, source_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{sanitize_remote_name(source_path.stem)}.cut_master.mp4"
+    if output_path.exists() and output_path.stat().st_mtime >= source_path.stat().st_mtime:
+        print(f"✓ 既存の自動カット済み中間動画を再利用: {output_path}")
+        return output_path
+    if output_path.exists():
+        output_path.unlink()
+
+    for edit_method in ("audio:threshold=1%", "none"):
+        command = build_cut_master_command(
+            source_path,
+            output_path,
+            edit_method=edit_method,
+        )
+        print("自動カット済み中間動画をレンダリング中...")
+        print("実行コマンド:", format_command_for_log(command))
+        try:
+            result = run_text_subprocess(command, check=True, cwd=working_dir)
+        except subprocess.CalledProcessError as error:
+            error_text = f"{error.stdout or ''}\n{error.stderr or ''}"
+            if edit_method != "none" and "Timeline is empty" in error_text:
+                print("! 中間動画でも残す区間が空になったため、録画全体保持で再試行します。")
+                continue
+            print(f"! 自動カット済み中間動画の生成に失敗しました: {error}")
+            if error.stderr:
+                print(error.stderr)
+            return None
+        except FileNotFoundError:
+            print("! auto-editorが見つからず、中間動画を生成できません。")
+            return None
+
+        if result.stdout:
+            print(result.stdout)
+        if output_path.exists():
+            print(f"✓ 自動カット済み中間動画を生成しました: {output_path}")
+            return output_path
+        print(f"! auto-editorは成功しましたが中間動画が見つかりません: {output_path}")
+        return None
+
+    return None
 
 def find_xml_for_source(xml_files, source_video_path, min_mtime):
     """今回のauto-editor実行で作られた対象動画のXMLだけを選ぶ"""
@@ -1369,6 +1464,176 @@ def build_key_point_cues(segments):
             break
     return cues
 
+def ai_highlight_schema() -> dict:
+    """強調テロップ選定をClaude CLIへ要求するJSON Schema。"""
+    return {
+        "type": "object",
+        "properties": {
+            "highlights": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "segment_index": {"type": "integer"},
+                        "text": {"type": "string"},
+                    },
+                    "required": ["segment_index", "text"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["highlights"],
+        "additionalProperties": False,
+    }
+
+def parse_ai_highlight_cues(output: str, segments: list[dict]) -> list[dict]:
+    """Claude CLIの出力をカット後動画の時刻付きテロップへ変換する。"""
+    payload = json.loads(output)
+    data = payload.get("structured_output", payload)
+    if not isinstance(data, dict) or "highlights" not in data:
+        result = payload.get("result") if isinstance(payload, dict) else None
+        if isinstance(result, str):
+            data = json.loads(result)
+
+    highlights = []
+    for item in data.get("highlights", []) if isinstance(data, dict) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("segment_index"), int):
+            continue
+        segment_index = int(item["segment_index"])
+        if not 0 <= segment_index < len(segments):
+            continue
+        text = clean_text(item.get("text", "")).strip("「」『』、。,.!? ")
+        if not 4 <= len(text) <= 42:
+            continue
+        segment = segments[segment_index]
+        start = float(segment.get("start", 0))
+        end = max(start, float(segment.get("end", start)))
+        highlights.append({
+            "time": start,
+            "duration": max(1.5, min(5.0, end - start)),
+            "text": text,
+            "source_text": clean_text(segment.get("text", "")),
+        })
+    return highlights
+
+def local_highlight_cues(segments: list[dict]) -> list[dict]:
+    """Claude CLIが使えない場合の決定論的な強調テロップ候補。"""
+    max_titles = int(post_cut_title_value(
+        "DAVINCI_POST_CUT_MAX_TITLES",
+        "max_titles",
+        DEFAULT_POST_CUT_MAX_TITLES,
+    ))
+    min_gap = float(post_cut_title_value(
+        "DAVINCI_POST_CUT_MIN_GAP_SECONDS",
+        "min_gap_seconds",
+        DEFAULT_POST_CUT_MIN_GAP_SECONDS,
+    ))
+    candidates = []
+    for index, segment in enumerate(segments):
+        text = clean_text(segment.get("text", ""))
+        if not segment_is_useful(segment):
+            continue
+        score = sum(4 for phrase in KEY_CUE_PHRASES if phrase in text)
+        score += 3 if re.search(r"\d", text) else 0
+        score += 2 if 10 <= len(text) <= 42 else 0
+        score += min(3, len(extract_terms_from_text(text)))
+        candidates.append((score, index, segment))
+
+    selected = []
+    for _, _, segment in sorted(candidates, key=lambda item: (-item[0], item[1])):
+        start = float(segment.get("start", 0))
+        if any(abs(start - item["time"]) < min_gap for item in selected):
+            continue
+        end = max(start, float(segment.get("end", start)))
+        selected.append({
+            "time": start,
+            "duration": max(1.5, min(5.0, end - start)),
+            "text": shorten_text(segment.get("text", ""), 42),
+            "source_text": clean_text(segment.get("text", "")),
+        })
+        if len(selected) >= max_titles:
+            break
+    return sorted(selected, key=lambda item: item["time"])
+
+def build_ai_highlight_cues(segments: list[dict]) -> list[dict]:
+    """カット後文字起こしからインパクトのある発言だけを選ぶ。"""
+    fallback = local_highlight_cues(segments)
+    claude_command = shutil.which("claude")
+    if not claude_command:
+        print("! Claude CLIがないため、強調テロップはローカル選定を使用します。")
+        return fallback
+
+    candidate_indexes = []
+    for index, segment in enumerate(segments):
+        if segment_has_key_cue(segment) or re.search(r"\d", segment.get("text", "")):
+            candidate_indexes.append(index)
+        if len(candidate_indexes) >= 100:
+            break
+    if not candidate_indexes:
+        candidate_indexes = list(range(min(80, len(segments))))
+
+    candidates = [
+        {
+            "segment_index": index,
+            "start": round(float(segments[index].get("start", 0)), 2),
+            "text": clean_text(segments[index].get("text", "")),
+        }
+        for index in candidate_indexes
+    ]
+    max_titles = int(post_cut_title_value(
+        "DAVINCI_POST_CUT_MAX_TITLES",
+        "max_titles",
+        DEFAULT_POST_CUT_MAX_TITLES,
+    ))
+    prompt = (
+        "あなたはYouTube横動画の編集者です。自動カット後の文字起こしから、"
+        "視聴者が注目すべき発言だけを強調テロップとして選んでください。\n"
+        f"最大{max_titles}件。候補を無理に埋めないでください。\n"
+        "数字、結論、意外性、重要な操作、強い主張を優先してください。\n"
+        "textは元発言の意味を変えず、画面で一読できる4〜36文字にしてください。\n"
+        "同じ内容を繰り返さず、単なる話題名や一般語だけを選ばないでください。\n\n"
+        f"候補:\n{json.dumps(candidates, ensure_ascii=False)}"
+    )
+    command = [
+        claude_command,
+        "--print",
+        "--output-format", "json",
+        "--json-schema", json.dumps(ai_highlight_schema(), ensure_ascii=False),
+        "--no-session-persistence",
+        "--permission-mode", "dontAsk",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            input=prompt,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+            check=True,
+        )
+        highlights = parse_ai_highlight_cues(result.stdout, segments)
+    except (subprocess.SubprocessError, ValueError, json.JSONDecodeError) as error:
+        print(f"! AI強調テロップ選定に失敗しました。ローカル選定を使用します: {error}")
+        return fallback
+
+    min_gap = float(post_cut_title_value(
+        "DAVINCI_POST_CUT_MIN_GAP_SECONDS",
+        "min_gap_seconds",
+        DEFAULT_POST_CUT_MIN_GAP_SECONDS,
+    ))
+    selected = []
+    for highlight in sorted(highlights, key=lambda item: item["time"]):
+        if any(abs(highlight["time"] - item["time"]) < min_gap for item in selected):
+            continue
+        selected.append(highlight)
+        if len(selected) >= max_titles:
+            break
+    print(f"✓ AIが強調テロップを選定しました: {len(selected)}件")
+    return selected or fallback
+
 def build_qc_notes(segments):
     """編集時に見るべき箇所を簡易検出する"""
     notes = []
@@ -1871,6 +2136,14 @@ def write_ai_assist_files(ai_plan, output_dir):
         f.write(f"hook_asset_path: {ai_plan.get('hook_asset_path') or ''}\n")
         f.write(f"hook_insert_mode: {ai_plan.get('hook_insert_mode') or ''}\n")
         f.write(f"timeline_insert_mode: {ai_plan.get('timeline_insert_mode') or ''}\n")
+        f.write(f"original_source_video: {ai_plan.get('original_source_video') or ''}\n")
+        f.write(f"cut_master_path: {ai_plan.get('cut_master_path') or ''}\n")
+        f.write(
+            "post_cut_titled_video_path: "
+            f"{ai_plan.get('post_cut_titled_video_path') or ''}\n"
+        )
+        f.write(f"highlight_cues: {len(ai_plan.get('highlight_cues', []))}\n")
+        f.write(f"highlight_ass_path: {ai_plan.get('highlight_ass_path') or ''}\n")
         f.write(f"chapters: {len(ai_plan.get('chapters', []))}\n")
         f.write(f"key_point_cues: {len(ai_plan.get('key_point_cues', []))}\n")
         f.write(f"qc_notes: {len(ai_plan.get('qc_notes', []))}\n")
@@ -1901,10 +2174,14 @@ def prepare_editable_hook_card(ai_plan):
     print("✓ フックカードはmp4ではなく、Resolve上で編集可能なText+/Fusionタイトルとして追加します。")
     return ai_plan["hook_insert_mode"]
 
-def build_ai_assist_plan(source_video_path, working_dir):
+def build_ai_assist_plan(source_video_path, working_dir, output_dir=None):
     """文字起こしからDaVinci上に置く補助情報を作る。失敗時は空プランを返す。"""
     dependencies = describe_ai_dependencies()
-    output_dir = source_ai_assist_dir(working_dir, source_video_path)
+    output_dir = (
+        Path(output_dir)
+        if output_dir is not None
+        else source_ai_assist_dir(working_dir, source_video_path)
+    )
     print("AI補助の依存ツール状態:")
     print(f"  whisper_backend: {dependencies.get('whisper_backend') or 'local'}")
     if dependencies.get("remote_whisper_host"):
@@ -1989,6 +2266,180 @@ def build_ai_assist_plan(source_video_path, working_dir):
         ai_plan = empty_ai_plan(f"AI assist error: {e}", dependencies)
         write_ai_assist_files(ai_plan, output_dir)
         return ai_plan
+
+def ass_timestamp(seconds: float) -> str:
+    """秒数をASSのH:MM:SS.ccへ変換する。"""
+    centiseconds = max(0, int(round(float(seconds) * 100)))
+    hours, remainder = divmod(centiseconds, 360000)
+    minutes, remainder = divmod(remainder, 6000)
+    whole_seconds, fraction = divmod(remainder, 100)
+    return f"{hours}:{minutes:02d}:{whole_seconds:02d}.{fraction:02d}"
+
+def escape_ass_text(text: str) -> str:
+    """ASSの上書きタグとして解釈される文字をエスケープする。"""
+    escaped = str(text or "").replace("\\", "\\\\")
+    escaped = escaped.replace("{", "\\{").replace("}", "\\}")
+    return escaped.replace("\r\n", "\\N").replace("\n", "\\N").replace("\r", "\\N")
+
+def probe_video_resolution(video_path: Path) -> tuple[int, int]:
+    """ffprobeで動画解像度を取得し、失敗時はフルHDへ戻す。"""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return (1920, 1080)
+    command = [
+        ffprobe,
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "json",
+        str(video_path),
+    ]
+    try:
+        result = run_text_subprocess(command, check=True)
+        streams = json.loads(result.stdout).get("streams", [])
+        width = int(streams[0]["width"])
+        height = int(streams[0]["height"])
+        if width > 0 and height > 0:
+            return (width, height)
+    except (subprocess.SubprocessError, ValueError, KeyError, IndexError, json.JSONDecodeError):
+        pass
+    return (1920, 1080)
+
+def write_highlight_ass(
+    output_path: Path,
+    highlights: list[dict],
+    *,
+    resolution: tuple[int, int],
+    font_name: str,
+) -> Path:
+    """カット後の正確な時刻で、横動画用の強調テロップASSを書く。"""
+    width, height = resolution
+    base_font_size = int(post_cut_title_value(
+        "DAVINCI_POST_CUT_FONT_SIZE",
+        "font_size",
+        DEFAULT_POST_CUT_FONT_SIZE,
+    ))
+    font_size = max(28, int(base_font_size * height / 1080))
+    header = "\n".join([
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        f"PlayResX: {width}",
+        f"PlayResY: {height}",
+        "ScaledBorderAndShadow: yes",
+        "WrapStyle: 2",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding",
+        f"Style: Highlight,{font_name},{font_size},&H00FFFFFF,&H000000FF,"
+        "&H00101010,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,2,80,80,90,1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ])
+    lines = [header]
+    for highlight in highlights:
+        start = float(highlight.get("time", 0))
+        duration = max(0.1, float(highlight.get("duration", 0)))
+        text = escape_ass_text(highlight.get("text", ""))
+        lines.append(
+            "Dialogue: 0,"
+            f"{ass_timestamp(start)},{ass_timestamp(start + duration)},"
+            f"Highlight,,0,0,0,,{text}"
+        )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+    return output_path
+
+def render_highlight_video(
+    source_path: Path,
+    ass_path: Path,
+    output_path: Path,
+) -> Path | None:
+    """FFmpeg/ASSでAI強調テロップをカット済み動画へ焼き込む。"""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        print("! ffmpegが見つからないためAIテロップ動画を生成できません。")
+        return None
+    command = [
+        ffmpeg,
+        "-y",
+        "-i", str(source_path.resolve()),
+        "-vf", f"ass={ass_path.name}",
+        "-c:v", "libx264",
+        "-preset", str(post_cut_title_value(
+            "DAVINCI_POST_CUT_FINAL_PRESET",
+            "final_preset",
+            "medium",
+        )),
+        "-crf", str(post_cut_title_value(
+            "DAVINCI_POST_CUT_FINAL_CRF",
+            "final_crf",
+            DEFAULT_POST_CUT_FINAL_CRF,
+        )),
+        "-c:a", "aac",
+        "-b:a", "320k",
+        "-movflags", "+faststart",
+        str(output_path.resolve()),
+    ]
+    print("AI強調テロップを焼き込み中...")
+    print("実行コマンド:", format_command_for_log(command))
+    try:
+        run_text_subprocess(command, check=True, cwd=str(ass_path.parent))
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        print(f"! AIテロップ動画の生成に失敗しました: {error}")
+        if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+            print(error.stderr)
+        return None
+    if not output_path.exists():
+        print(f"! FFmpeg完了後にAIテロップ動画が見つかりません: {output_path}")
+        return None
+    print(f"✓ AIテロップ動画を生成しました: {output_path}")
+    return output_path
+
+def render_post_cut_ai_titles(
+    cut_master_path: Path,
+    ai_plan: dict,
+    output_dir: Path,
+) -> Path | None:
+    """カット後文字起こしから強調箇所を選び、完成候補動画を生成する。"""
+    transcript_path = ai_plan.get("transcript_path")
+    if not ai_plan.get("enabled") or not transcript_path:
+        print("! カット後文字起こしがないためAIテロップ焼き込みをスキップします。")
+        return None
+    segments = load_transcript_segments(Path(transcript_path))
+    highlights = build_ai_highlight_cues(segments)
+    ai_plan["highlight_cues"] = highlights
+    highlight_json_path = output_dir / "ai_highlights.json"
+    highlight_json_path.write_text(
+        json.dumps({"highlights": highlights}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    if not highlights:
+        print("! 強調する発言が選ばれなかったため、テロップ焼き込みをスキップします。")
+        return None
+
+    ass_path = output_dir / "ai_highlights.ass"
+    font_name = str(post_cut_title_value(
+        "DAVINCI_POST_CUT_FONT",
+        "font_name",
+        TEXT_TITLE_FONT,
+    ))
+    write_highlight_ass(
+        ass_path,
+        highlights,
+        resolution=probe_video_resolution(cut_master_path),
+        font_name=font_name,
+    )
+    output_path = output_dir / f"{sanitize_remote_name(cut_master_path.stem)}.ai_titled.mp4"
+    rendered_path = render_highlight_video(cut_master_path, ass_path, output_path)
+    ai_plan["highlight_json_path"] = str(highlight_json_path)
+    ai_plan["highlight_ass_path"] = str(ass_path)
+    ai_plan["post_cut_titled_video_path"] = str(rendered_path or "")
+    write_ai_assist_files(ai_plan, output_dir)
+    return rendered_path
 
 def wrap_hook_text_for_title(text, width=18, max_lines=4):
     """Text+で読みやすいように、空白あり/なしの文を軽く折り返す"""
@@ -2144,6 +2595,20 @@ def media_pool_item_name(item: Any) -> str:
         return str(properties.get("Clip Name") or "")
     except Exception:
         return ""
+
+def media_pool_item_total_frames(item: Any) -> int:
+    """Media Pool素材の総フレーム数を取得する。"""
+    try:
+        properties = item.GetClipProperty()
+        value = properties.get("Frames") if isinstance(properties, dict) else None
+        if value is not None:
+            return max(1, int(str(value).replace(",", "")))
+    except Exception:
+        pass
+    try:
+        return max(1, int(str(item.GetClipProperty("Frames")).replace(",", "")))
+    except Exception:
+        return 1
 
 def find_native_text_title_template(media_pool: Any) -> Any | None:
     """同梱プロジェクトのネイティブText+素材を再帰検索する。"""
@@ -2696,8 +3161,31 @@ def main():
         print("✗ auto-editor実行失敗")
         sys.exit(1)
 
+    # 完成済みのauto-editor自動カットを単一動画へ書き出し、その時間軸でAI処理する。
+    ai_output_dir = source_ai_assist_dir(working_dir, source_video_path)
+    cut_master_path = None
+    if AI_ASSIST_ENABLED and post_cut_titles_enabled():
+        cut_master_path = render_cut_master(Path(source_video_path), working_dir)
+
+    ai_source_path = cut_master_path or Path(source_video_path)
     # AI補助情報の作成（失敗しても従来処理を続行）
-    ai_plan = build_ai_assist_plan(source_video_path, working_dir)
+    ai_plan = build_ai_assist_plan(
+        ai_source_path,
+        working_dir,
+        output_dir=ai_output_dir,
+    )
+    ai_plan["original_source_video"] = str(source_video_path)
+    ai_plan["cut_master_path"] = str(cut_master_path or "")
+    post_cut_titled_video_path = None
+    if cut_master_path and ai_plan.get("enabled"):
+        post_cut_titled_video_path = render_post_cut_ai_titles(
+            cut_master_path,
+            ai_plan,
+            ai_output_dir,
+        )
+        if post_cut_titled_video_path:
+            ai_plan["timeline_insert_mode"] = "post_cut_ffmpeg_ass"
+            write_ai_assist_files(ai_plan, ai_output_dir)
     
     # XMLファイルの検索とインポート
     xml_folder_paths = configured_paths("DAVINCI_XML_DIRS", "xml_dirs")
@@ -2737,6 +3225,7 @@ def main():
     video_paths = configured_paths("DAVINCI_VIDEO_PATH", "video_path")
     ending_clip_name = configured_value("DAVINCI_ENDING_CLIP_NAME", "ending_clip_name", DEFAULT_ENDING_CLIP_NAME)
     ending_video_path = find_clip_path(video_paths, ending_clip_name)
+    ending_clip = None
     if ending_video_path:
         print(f"✓ エンディング動画: {ending_video_path}")
         
@@ -2811,37 +3300,62 @@ def main():
     print("XMLタイムラインの内容をmainタイムラインに挿入します")
     try:
         clips_to_append = []
+        post_cut_render_used = False
+        edited_duration_frames = 0
         
-        # XMLタイムラインからクリップを取得
-        video_track_count = xml_timeline.GetTrackCount("video")
-        print(f"XMLタイムラインのビデオトラック数: {video_track_count}")
-        
-        for track_idx in range(1, video_track_count + 1):
-            items_in_track = xml_timeline.GetItemsInTrack("video", track_idx)
-            if items_in_track:
-                for item_id, clip_obj in items_in_track.items():
-                    if clip_obj:
-                        try:
-                            clip_start = clip_obj.GetLeftOffset()
-                            clip_duration = clip_obj.GetDuration()
-                            clip_end = clip_duration + clip_start
-                            media_item = clip_obj.GetMediaPoolItem()
-                            
-                            if media_item is not None:
-                                clips_to_append.append({
-                                    'mediaPoolItem': media_item,
-                                    'startFrame': clip_start,
-                                    'endFrame': clip_end
-                                })
-                                print(f"クリップ追加予定: {clip_obj.GetName()}")
-                        except Exception as e:
-                            print(f"クリップ情報取得エラー: {e}")
-                            continue
-        
-        edited_duration_frames = sum(
-            max(0, int(clip.get('endFrame', 0)) - int(clip.get('startFrame', 0)))
-            for clip in clips_to_append
-        )
+        if post_cut_titled_video_path and Path(post_cut_titled_video_path).exists():
+            print("AIテロップ焼き込み済みの自動カット動画をmainへ配置します")
+            imported_items = media_pool.ImportMedia([str(post_cut_titled_video_path)])
+            if imported_items:
+                post_cut_item = imported_items[0]
+                post_cut_frames = media_pool_item_total_frames(post_cut_item)
+                clips_to_append.append({
+                    "mediaPoolItem": post_cut_item,
+                    "startFrame": 0,
+                    "endFrame": post_cut_frames,
+                })
+                edited_duration_frames = post_cut_frames
+                post_cut_render_used = True
+                print(f"✓ AIテロップ済み本編を追加予定: {post_cut_item.GetName()}")
+                if ending_clip is not None:
+                    ending_frames = media_pool_item_total_frames(ending_clip)
+                    clips_to_append.append({
+                        "mediaPoolItem": ending_clip,
+                        "startFrame": 0,
+                        "endFrame": ending_frames,
+                    })
+                    print(f"✓ エンディングを追加予定: {ending_clip.GetName()}")
+            else:
+                print("! AIテロップ済み動画をMedia Poolへ読み込めないためXMLタイムラインへ戻します。")
+
+        if not post_cut_render_used:
+            # AIテロップの外部レンダリングに失敗した場合も、従来の自動カットXMLを必ず使う。
+            video_track_count = xml_timeline.GetTrackCount("video")
+            print(f"XMLタイムラインのビデオトラック数: {video_track_count}")
+            for track_idx in range(1, video_track_count + 1):
+                items_in_track = xml_timeline.GetItemsInTrack("video", track_idx)
+                if items_in_track:
+                    for item_id, clip_obj in items_in_track.items():
+                        if clip_obj:
+                            try:
+                                clip_start = clip_obj.GetLeftOffset()
+                                clip_duration = clip_obj.GetDuration()
+                                clip_end = clip_duration + clip_start
+                                media_item = clip_obj.GetMediaPoolItem()
+                                if media_item is not None:
+                                    clips_to_append.append({
+                                        "mediaPoolItem": media_item,
+                                        "startFrame": clip_start,
+                                        "endFrame": clip_end,
+                                    })
+                                    print(f"クリップ追加予定: {clip_obj.GetName()}")
+                            except Exception as e:
+                                print(f"クリップ情報取得エラー: {e}")
+                                continue
+            edited_duration_frames = sum(
+                max(0, int(clip.get("endFrame", 0)) - int(clip.get("startFrame", 0)))
+                for clip in clips_to_append
+            )
 
         fps = get_timeline_fps(main_timeline)
         # Text+は本編追加後にMedia Pool素材としてV2へ非リップル配置する。
@@ -2882,26 +3396,34 @@ def main():
                     edited_duration_frames,
                     hook_frames=hook_frames,
                 )
-                insert_ai_assist_text_objects(
-                    main_timeline,
-                    start_frame,
-                    ai_plan,
-                    fps,
-                    edited_duration_frames,
-                    hook_frames=hook_frames,
-                    project=project,
-                    media_pool=media_pool,
-                )
-                insert_ai_assist_media_actions(
-                    media_pool,
-                    main_timeline,
-                    start_frame,
-                    ai_plan,
-                    fps,
-                    edited_duration_frames,
-                    hook_frames,
-                    video_paths,
-                )
+                if post_cut_render_used:
+                    print("✓ AIテロップは動画へ焼き込み済みのため、Resolve Text+自動配置は行いません。")
+                elif post_cut_titles_enabled():
+                    print(
+                        "! 外部AIテロップ処理は完成しませんでした。"
+                        "自動カットXMLだけを配置し、不安定なResolve Text+方式には戻りません。"
+                    )
+                else:
+                    insert_ai_assist_text_objects(
+                        main_timeline,
+                        start_frame,
+                        ai_plan,
+                        fps,
+                        edited_duration_frames,
+                        hook_frames=hook_frames,
+                        project=project,
+                        media_pool=media_pool,
+                    )
+                    insert_ai_assist_media_actions(
+                        media_pool,
+                        main_timeline,
+                        start_frame,
+                        ai_plan,
+                        fps,
+                        edited_duration_frames,
+                        hook_frames,
+                        video_paths,
+                    )
             else:
                 print("✗ クリップの挿入に失敗しました")
                 

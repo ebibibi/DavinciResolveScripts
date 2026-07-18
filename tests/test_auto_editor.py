@@ -80,3 +80,31 @@ def test_full_recording_retry_failure_stops_safely(tmp_path, monkeypatch) -> Non
 
     assert EDITOR.run_auto_editor(str(tmp_path)) is False
     assert len(calls) == 2
+
+
+def test_cut_master_render_preserves_empty_timeline_fallback(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    source = tmp_path / "recording.mkv"
+    source.write_bytes(b"video")
+    calls = []
+
+    def fake_run(command, check=True, cwd=None):
+        calls.append(command)
+        if len(calls) == 1:
+            raise called_process_error(command, "Error! Timeline is empty, nothing to do.")
+        output_path = Path(command[command.index("-o") + 1])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"cut master")
+        return SimpleNamespace(stdout="Starting")
+
+    monkeypatch.setattr(EDITOR, "run_text_subprocess", fake_run)
+
+    result = EDITOR.render_cut_master(source, str(tmp_path))
+
+    assert result is not None
+    assert result.read_bytes() == b"cut master"
+    assert calls[0][calls[0].index("--edit") + 1] == "audio:threshold=1%"
+    assert calls[1][calls[1].index("--edit") + 1] == "none"
+    assert "--margin" not in calls[1]
