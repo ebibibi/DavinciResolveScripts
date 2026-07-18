@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 date: 2026-07-17
 decision: Generate viewer-focused topic statements with one structured Claude CLI call and use a local transcript fallback.
+superseded_by: ADR-005
 ---
 
 # Generate viewer-focused topic labels

@@ -3,14 +3,14 @@ type: adr
 id: ADR-003
 title: Append the bundled native Text+ template directly to V2
 decision: Reuse the native Text+ generator named `テロップ` from the bundled project template and append it directly to V2.
-status: accepted
+status: superseded
 date: 2026-07-16
 deciders: [Masahiko Ebisu, Claude]
 tags: [davinci-resolve, text-plus, timeline, video-track, font]
 scope: context
 context: DavinciResolveScripts
 supersedes: ADR-002
-superseded_by:
+superseded_by: ADR-005
 ---
 
 # Append the bundled native Text+ template directly to V2

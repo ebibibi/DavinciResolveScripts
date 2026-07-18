@@ -19,6 +19,17 @@
   "whisper_device": "auto",
   "whisper_fp16": false,
   "whisper_word_timestamps": true,
+  "post_cut_ai_titles": {
+    "enabled": true,
+    "cut_master_video_bitrate": "40M",
+    "cut_master_audio_bitrate": "320k",
+    "final_crf": 16,
+    "final_preset": "medium",
+    "max_titles": 12,
+    "min_gap_seconds": 10,
+    "font_name": "HGPSoeiKakugothicUB",
+    "font_size": 74
+  },
   "ai_edit_actions": {
     "experimental_full_actions": false,
     "captions": false,

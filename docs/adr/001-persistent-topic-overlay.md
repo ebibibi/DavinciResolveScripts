@@ -3,14 +3,14 @@ type: adr
 id: ADR-001
 title: Use refreshed Text+ clips for persistent topic overlays
 decision: Represent each transcript topic with consecutive short Text+ clips at the edge of the frame.
-status: accepted
+status: superseded
 date: 2026-07-16
 deciders: [Masahiko Ebisu, Claude]
 tags: [davinci-resolve, whisper, text-plus, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes:
-superseded_by:
+superseded_by: ADR-005
 ---
 
 # Use refreshed Text+ clips for persistent topic overlays
