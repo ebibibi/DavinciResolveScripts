@@ -1,5 +1,8 @@
 # DaVinci Resolve 自動編集実験メモ
 
+> **Historical:** Resolve API editing experiments are no longer part of the
+> default workflow. See [ADR-006](adr/006-highlight-first-rendering-without-resolve-automation.md).
+
 ## 目的
 
 DaVinci Resolve Studio の外部スクリプト API と Whisper 文字起こし結果を組み合わせて、手動編集前のタイムラインに「そのまま残しても成立する」編集候補を自動生成する。

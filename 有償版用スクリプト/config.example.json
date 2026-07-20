@@ -2,82 +2,18 @@
   "working_dirs": [
     "C:\\Users\\YOUR_NAME\\Videos\\OBS"
   ],
-  "xml_dirs": [
-    "C:\\Users\\YOUR_NAME\\Videos\\OBS"
-  ],
-  "video_path": [
-    "C:\\Users\\YOUR_NAME\\Videos\\Assets"
-  ],
-  "ending_clip_name": "ending.mov",
-  "op_clip_name": "01_EBI_CHAN_OP",
-  "section_break_clip_names": [
-    "02_EBI_CHAN_OP.mov",
-    "03_EBI_CHAN_IN.mov"
-  ],
-  "whisper_backend": "local",
-  "whisper_language": "Japanese",
-  "whisper_device": "auto",
-  "whisper_fp16": false,
-  "whisper_word_timestamps": true,
-  "post_cut_ai_titles": {
-    "enabled": true,
-    "cut_master_video_bitrate": "40M",
-    "cut_master_audio_bitrate": "320k",
-    "final_crf": 16,
-    "final_preset": "medium",
-    "max_titles": 12,
-    "min_gap_seconds": 10,
+  "opening_highlight": {
+    "output_dir": "",
+    "maximum_highlights": 3,
+    "maximum_total_seconds": 24,
+    "maximum_segment_seconds": 8,
+    "padding_seconds": 0.5,
+    "minimum_gap_seconds": 30,
+    "title_seconds": 4,
     "font_name": "HGPSoeiKakugothicUB",
-    "font_size": 74
-  },
-  "ai_edit_actions": {
-    "experimental_full_actions": false,
-    "captions": false,
-    "chapter_markers": true,
-    "chapter_titles": false,
-    "hook_card": false,
-    "current_topic_overlay": true,
-    "viewer_focused_topic_labels": true,
-    "key_point_titles": false,
-    "combine_legacy_titles": false,
-    "topic_target_seconds": 45,
-    "topic_min_seconds": 15,
-    "topic_max_seconds": 75,
-    "topic_overlay_refresh_seconds": 4,
-    "max_topics": 30,
-    "section_cards": false,
-    "section_break_videos": false,
-    "sound_effects": false,
-    "max_captions": 12,
-    "caption_min_gap_seconds": 8
-  },
-  "sound_effects": [
-    {
-      "name": "key_point",
-      "clip_name": "key_point.wav",
-      "trigger": "key_point",
-      "track_index": 3,
-      "cooldown_seconds": 20
-    }
-  ],
-  "remote_whisper": {
-    "host": "",
-    "user": "",
-    "identity_file": "",
-    "ssh_args": [],
-    "scp_args": [],
-    "remote_dir": "davinci-whisper-jobs",
-    "command": "whisper",
-    "profile": "speed",
-    "model": "turbo",
-    "device": "cuda",
-    "fp16": true,
-    "beam_size": 1,
-    "best_of": 1,
-    "verbose": false,
-    "extra_args": [],
-    "upload": "audio",
-    "keep_remote_files": false
-  },
-  "priority_terms": []
+    "font_size": 96,
+    "manual_title": "",
+    "manual_highlights": [],
+    "transcript_command": []
+  }
 }
