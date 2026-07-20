@@ -63,22 +63,14 @@ if xml_folder_path is None:
 
 print(f"選択されたXMLフォルダ: {xml_folder_path}")
 
-# 動画素材フォルダとエンディングクリップ名を指定
-video_paths = [
-    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材',
-    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材'
+# エンディング動画へのパスを指定
+ending_video_paths = [
+    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
+    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov'
 ]
-ending_clip_name = '03_EBI_CHAN_IN.mov'
-print(f"動画素材フォルダ候補: {video_paths}")
+print(f"エンディング動画パス候補: {ending_video_paths}")
 
-ending_video_path = next(
-    (
-        os.path.join(path, ending_clip_name)
-        for path in video_paths
-        if os.path.exists(os.path.join(path, ending_clip_name))
-    ),
-    None
-)
+ending_video_path = next((path for path in ending_video_paths if os.path.exists(path)), None)
 
 if ending_video_path is None:
     print("いずれのエンディング動画も存在しません。終了します。")
@@ -88,7 +80,7 @@ print(f"選択されたエンディング動画: {ending_video_path}")
 
 ## Davinci Resolve API
 print("Resolveオブジェクトを取得します")
-resolve = app.GetResolve()
+resolve = app.GetResolve()  # noqa: F821 - provided by the Resolve script console
 print("ProjectManagerオブジェクトを取得します")
 project_manager = resolve.GetProjectManager()
 
@@ -199,7 +191,7 @@ try:
     items_in_track = main_timeline.GetItemsInTrack("video", video_track)
     items_count = len(items_in_track)
     print(f"V{video_track}トラックのアイテム数: {items_count}")
-    
+
     if items_count == 0:
         print(f"V{video_track}トラックにアイテムがありません。")
         op_clip_found = False
@@ -238,7 +230,7 @@ try:
     # timeline自体をmediaPoolItemとして使用することはできない
     # 代わりに、timeline内の全クリップを取得して追加する
     clips_to_append = []
-    
+
     # ビデオトラックからクリップを取得
     video_track_count = timeline.GetTrackCount("video")
     print(f"Debug: video_track_count={video_track_count}")
@@ -269,15 +261,15 @@ try:
                             'startFrame': clip_start,
                             'endFrame': clip_end
                         })
-    
+
     print(f"挿入するクリップ数: {len(clips_to_append)}")
-    
+
     # 追加のデバッグプリント
     print(f"Debug: timeline is {timeline}")
     print(f"Debug: media_pool is {media_pool}")
     print(f"Debug: main_timeline is {main_timeline}")
     print(f"Debug: clips_to_append is {clips_to_append}")
-    
+
     # クリップが取得できた場合のみ挿入
     if clips_to_append:
         # 再生ヘッドを配置
@@ -285,7 +277,7 @@ try:
             main_timeline.SetCurrentFrame(start_frame)
         except Exception as e:
             print(f"再生ヘッド配置でエラー: {str(e)}")
-        
+
         # Debug Insert Step: Variables in the try block
         print("Debug Insert Step: Variables in the try block:")
         print(f"  timeline: {timeline}, type={type(timeline)}")
@@ -293,7 +285,7 @@ try:
         print(f"  main_timeline: {main_timeline}, type={type(main_timeline)}")
         print(f"  start_frame: {start_frame}, type={type(start_frame)}")
         print(f"  clips_to_append: {clips_to_append}, type={type(clips_to_append)}")
-        
+
         # クリップをメインタイムラインに追加
         insert_result = media_pool.AppendToTimeline(clips_to_append)
         if not insert_result:
@@ -314,7 +306,7 @@ try:
     print("編集ポジションをタイムライン先頭に移動しました。")
 except Exception as e:
     print(f"編集ポジションの移動でエラー: {str(e)}")
-    
-    
+
+
 print("全ての処理が完了しました。")
 

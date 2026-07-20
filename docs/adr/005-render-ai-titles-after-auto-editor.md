@@ -3,14 +3,14 @@ type: adr
 id: ADR-005
 title: Render AI emphasis titles after the proven auto-editor cut
 decision: Keep auto-editor silence cutting as the immutable core, render its result once, transcribe the cut video, and burn selected emphasis titles with FFmpeg and ASS before importing the candidate into Resolve.
-status: accepted
+status: superseded
 date: 2026-07-18
 deciders: [Masahiko Ebisu, Codex, Claude Fable]
 tags: [auto-editor, whisper, ffmpeg, ass, davinci-resolve, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes: [ADR-001, ADR-003, ADR-004]
-superseded_by:
+superseded_by: ADR-006
 ---
 
 # Render AI emphasis titles after the proven auto-editor cut
