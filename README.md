@@ -1,9 +1,35 @@
-# Highlight-First Video Editor
+# DaVinci Resolve Auto Editors
 
-This repository automates the repetitive first pass for long-form YouTube videos.
-The default workflow is deliberately independent of the DaVinci Resolve API.
+This repository provides two explicit editing routes for long-form YouTube videos.
+The stable route preserves the long-running DaVinci Resolve workflow, while the
+advanced route is where new automation is developed and tested.
 
-## Default workflow
+## Choose a workflow
+
+| Route | Run this | Use it when |
+|---|---|---|
+| **Stable** | `有償版用スクリプト/run_auto_video_editor.ps1` | The recording only needs proven silence removal and the standard Resolve template timeline. |
+| **Advanced** | `有償版用スクリプト/run_advanced_auto_video_editor.ps1` | You intentionally want to try the latest highlight, title, or other experimental features. |
+
+The familiar `run_auto_video_editor.ps1` name deliberately remains attached to
+the stable workflow. New features must not silently change its output.
+
+## Stable workflow
+
+The stable launcher runs `auto_video_editor.py` and keeps the established
+DaVinci Resolve process:
+
+1. Start or connect to DaVinci Resolve.
+2. Create a project from `テンプレート.drp`.
+3. Find the newest OBS recording.
+4. Use `auto-editor` to remove silence with `audio:threshold=1%` and
+   `--margin 0.5sec`.
+5. Import the generated timeline and combine it with the template timeline and
+   ending clip.
+
+Use this route when the instruction is effectively “do nothing extra.”
+
+## Advanced workflow
 
 1. Find the newest OBS recording.
 2. Use `auto-editor` to remove silence with the proven settings:
@@ -23,8 +49,8 @@ highlight 1 -> [highlight 2 -> highlight 3] -> complete cut master
 ```
 
 DaVinci Resolve can still be used for final review or manual corrections, but
-Text+, Fusion, topic labels, and timeline manipulation are no longer part of
-the default automation path.
+Text+, Fusion, topic labels, and timeline manipulation are not part of this
+advanced pipeline.
 
 ## Requirements
 
@@ -37,12 +63,23 @@ the default automation path.
 
 ## Quick start on Windows
 
+For the stable workflow, run:
+
+```powershell
+& ".\有償版用スクリプト\run_auto_video_editor.ps1"
+```
+
+For the advanced workflow:
+
 1. Copy `有償版用スクリプト/config.example.json` to
    `有償版用スクリプト/config.local.json`.
 2. Set `working_dirs` to the OBS recording folder.
-3. Run `有償版用スクリプト/run_auto_video_editor.ps1`.
+3. Run `有償版用スクリプト/run_advanced_auto_video_editor.ps1`.
 4. Review the generated MP4 and `highlight_plan.json` under
    `_highlight_output/<recording name>/`.
+
+Run `有償版用スクリプト/create_desktop_shortcut.ps1` once to create
+separate **Stable** and **Advanced** desktop shortcuts.
 
 You can also pass a recording explicitly:
 
@@ -50,7 +87,7 @@ You can also pass a recording explicitly:
 python "有償版用スクリプト/highlight_video.py" "C:\Videos\recording.mkv"
 ```
 
-## Configuration
+## Advanced configuration
 
 The `opening_highlight` object supports:
 
@@ -97,11 +134,12 @@ Manual highlights use cut-master timestamps and bypass Whisper and Claude.
   retained.
 - Every fallback reason is recorded in `highlight_plan.json`.
 
-## Legacy Resolve script
+## Stability boundary
 
-`有償版用スクリプト/auto_video_editor.py` has been restored to the last
-pre-AI-editing baseline for historical/manual use. It is not called by the
-default runner. The free-edition script is likewise kept as a legacy utility.
+`有償版用スクリプト/auto_video_editor.py` is the protected stable entry point.
+Experimental work belongs in `highlight_video.py` or a future advanced module,
+called only by `run_advanced_auto_video_editor.ps1`. The free-edition script is
+kept as a separate legacy utility.
 
 ## Tests
 

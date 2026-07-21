@@ -1,5 +1,5 @@
-# Highlight-first video editor runner
-# The default workflow intentionally does not automate DaVinci Resolve.
+# Stable DaVinci Resolve auto editor runner
+# This is the proven workflow: silence removal + template timeline creation.
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -7,28 +7,19 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
-$RequiredCommands = @("python", "auto-editor", "ffmpeg", "ffprobe")
+$RequiredCommands = @("python", "auto-editor")
 foreach ($Command in $RequiredCommands) {
     if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {
         throw "Required command was not found: $Command"
     }
 }
 
-$Arguments = @("highlight_video.py")
-$LocalConfig = Join-Path $ScriptDir "config.local.json"
-$LegacyConfig = Join-Path $ScriptDir "config.json"
-if (Test-Path $LocalConfig) {
-    $Arguments += @("--config", $LocalConfig)
-}
-elseif (Test-Path $LegacyConfig) {
-    $Arguments += @("--config", $LegacyConfig)
-}
-
-Write-Host "Starting highlight-first editing..."
-& python @Arguments
+Write-Host "Starting stable editing..." -ForegroundColor Cyan
+Write-Host "Workflow: auto-editor silence removal + Resolve template timeline"
+& python "auto_video_editor.py"
 if ($LASTEXITCODE -ne 0) {
-    throw "Highlight-first editing failed with exit code $LASTEXITCODE"
+    throw "Stable editing failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "Done. The final MP4 and highlight_plan.json are in _highlight_output."
+Write-Host "Done. Review the generated timeline in DaVinci Resolve." -ForegroundColor Green
 Read-Host "Press Enter to close"
