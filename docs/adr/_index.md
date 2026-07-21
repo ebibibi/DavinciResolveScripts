@@ -6,3 +6,4 @@
 - [ADR-004: Generate viewer-focused topic labels](004-generate-viewer-focused-topic-labels.md) — Use one structured Claude CLI request and a deterministic local fallback. (superseded, 2026-07-17)
 - [ADR-005: Render AI titles after the auto-editor cut](005-render-ai-titles-after-auto-editor.md) — Preserve the proven silence cut and move AI title rendering to the cut video's own timeline. (superseded, 2026-07-18)
 - [ADR-006: Prepend copied highlights and a takeaway title without Resolve automation](006-highlight-first-rendering-without-resolve-automation.md) — Keep auto-editor, prepend one or more copied highlights, and render the opening takeaway outside Resolve. (accepted, 2026-07-20)
+- [ADR-007: Separate stable and advanced editing launchers](007-separate-stable-and-advanced-editing-launchers.md) — Keep the familiar runner stable and expose experimental editing through a separate advanced runner. (accepted, 2026-07-21)

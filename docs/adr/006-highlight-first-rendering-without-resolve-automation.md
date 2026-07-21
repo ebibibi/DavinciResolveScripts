@@ -2,7 +2,7 @@
 type: adr
 id: ADR-006
 title: Prepend copied highlights and a takeaway title without Resolve automation
-decision: Keep the proven auto-editor silence cut, copy one or more grounded highlights to the opening, render a large takeaway title with FFmpeg and ASS, and remove Resolve API editing from the default workflow.
+decision: Keep the proven auto-editor silence cut, copy one or more grounded highlights to the opening, render a large takeaway title with FFmpeg and ASS, and keep Resolve API editing out of the advanced workflow.
 status: accepted
 date: 2026-07-20
 deciders: [Masahiko Ebisu, Codex]
@@ -44,7 +44,7 @@ layer, not the cut itself.
 
 ## Decision
 
-The default workflow is:
+The highlight-first advanced workflow is:
 
 1. Render a high-quality cut master with auto-editor using
    `audio:threshold=1%` and `--margin 0.5sec`.
@@ -62,8 +62,10 @@ Claude CLI may select grounded segment indexes and the takeaway. If it is missin
 or invalid, a deterministic transcript-based selector is used. Manual title and
 range overrides bypass both Whisper and Claude.
 
-The default PowerShell runner does not launch or control DaVinci Resolve. Resolve
-remains available only for optional final review or manual correction.
+The advanced PowerShell runner does not launch or control DaVinci Resolve.
+Resolve remains available only for optional final review or manual correction
+on this route. ADR-007 separately preserves the established Resolve workflow as
+the stable route.
 
 ## Rationale
 
@@ -84,11 +86,12 @@ remains available only for optional final review or manual correction.
   remains usable and the manifest records the fallback reason.
 - Claude is optional and never receives video or audio, only bounded transcript
   candidates.
-- The legacy Resolve scripts stay in the repository at the pre-AI baseline but
-  are no longer called by the default runner.
+- The stable Resolve scripts stay at the pre-AI baseline and are called only by
+  the stable runner defined in ADR-007.
 
 ## Related
 
 - [ADR-005: Render AI titles after the auto-editor cut](005-render-ai-titles-after-auto-editor.md)
 - [Issue #17](https://github.com/ebibibi/DavinciResolveScripts/issues/17)
+- [ADR-007: Separate stable and advanced editing launchers](007-separate-stable-and-advanced-editing-launchers.md)
 - [Auto-editor empty timeline KB](../kb/auto-editor-empty-timeline.md)
