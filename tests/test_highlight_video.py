@@ -416,8 +416,8 @@ def test_render_cut_master_retries_empty_timeline_without_margin(
     result = HIGHLIGHT_VIDEO.render_cut_master(source, tmp_path / "output")
 
     assert result.read_bytes() == b"cut"
-    assert calls[0][calls[0].index("--edit") + 1] == "audio:threshold=1%"
-    assert calls[0][calls[0].index("--margin") + 1] == "0.5sec"
+    assert calls[0][calls[0].index("--edit") + 1] == "audio:threshold=3%"
+    assert calls[0][calls[0].index("--margin") + 1] == "0.2sec"
     assert calls[1][calls[1].index("--edit") + 1] == "none"
     assert "--margin" not in calls[1]
 

@@ -26,6 +26,14 @@ def test_advanced_launcher_routes_only_to_highlight_editor() -> None:
     assert 'python "auto_video_editor.py"' not in content
 
 
+def test_stable_editor_uses_current_silence_cut_settings() -> None:
+    content = (SCRIPT_DIR / "auto_video_editor.py").read_text(encoding="utf-8")
+
+    assert '"--margin", "0.2sec"' in content
+    assert '"--edit", "audio:threshold=3%"' in content
+    assert "threshold=1%" not in content
+
+
 def test_shortcut_creator_exposes_both_routes_with_clear_names() -> None:
     content = (SCRIPT_DIR / "create_desktop_shortcut.ps1").read_text(
         encoding="utf-8"
