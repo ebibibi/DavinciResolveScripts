@@ -22,8 +22,8 @@ DaVinci Resolve process:
 1. Start or connect to DaVinci Resolve.
 2. Create a project from `テンプレート.drp`.
 3. Find the newest OBS recording.
-4. Use `auto-editor` to remove silence with `audio:threshold=1%` and
-   `--margin 0.5sec`.
+4. Use `auto-editor` to remove silence with `audio:threshold=3%` and
+   `--margin 0.2sec`.
 5. Import the generated timeline and combine it with the template timeline and
    ending clip.
 
@@ -33,7 +33,7 @@ Use this route when the instruction is effectively “do nothing extra.”
 
 1. Find the newest OBS recording.
 2. Use `auto-editor` to remove silence with the proven settings:
-   `audio:threshold=1%` and `--margin 0.5sec`.
+   `audio:threshold=3%` and `--margin 0.2sec`.
 3. Transcribe the cut master, so every timestamp is on the edited timeline.
 4. Select one highlight for a short video, two for a 20+ minute video, or three
    for a 45+ minute video.

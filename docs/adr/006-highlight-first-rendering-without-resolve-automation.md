@@ -46,8 +46,9 @@ layer, not the cut itself.
 
 The highlight-first advanced workflow is:
 
-1. Render a high-quality cut master with auto-editor using
-   `audio:threshold=1%` and `--margin 0.5sec`.
+1. Render a high-quality cut master with auto-editor using the then-current
+   `audio:threshold=1%` and `--margin 0.5sec` settings. ADR-008 defines the
+   current tuning.
 2. Transcribe the cut master so all selected timestamps belong to the edited body.
 3. Select one highlight for short videos, two for videos of at least 20 minutes,
    and three for videos of at least 45 minutes, subject to configured duration
@@ -94,4 +95,5 @@ the stable route.
 - [ADR-005: Render AI titles after the auto-editor cut](005-render-ai-titles-after-auto-editor.md)
 - [Issue #17](https://github.com/ebibibi/DavinciResolveScripts/issues/17)
 - [ADR-007: Separate stable and advanced editing launchers](007-separate-stable-and-advanced-editing-launchers.md)
+- [ADR-008: Tune silence detection to 3 percent with 0.2-second margins](008-tune-silence-detection-to-3-percent-with-0.2-second-margins.md)
 - [Auto-editor empty timeline KB](../kb/auto-editor-empty-timeline.md)

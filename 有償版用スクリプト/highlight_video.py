@@ -354,10 +354,10 @@ def render_cut_master(source: Path, output_dir: Path) -> Path:
     """Render the proven auto-editor silence cut as one high-quality MP4."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{source.stem}.cut_master.mp4"
-    for edit_method in ("audio:threshold=1%", "none"):
+    for edit_method in ("audio:threshold=3%", "none"):
         command = ["auto-editor", str(source)]
         if edit_method != "none":
-            command.extend(["--margin", "0.5sec"])
+            command.extend(["--margin", "0.2sec"])
         command.extend(
             [
                 "--edit",

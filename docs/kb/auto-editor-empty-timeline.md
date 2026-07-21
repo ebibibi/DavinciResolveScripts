@@ -18,7 +18,7 @@ context: DavinciResolveScripts
 The normal command fails before the Whisper and topic-overlay stages:
 
 ```text
-auto-editor recording.mkv --margin 0.5sec --edit audio:threshold=1% --export resolve
+auto-editor recording.mkv --margin 0.2sec --edit audio:threshold=3% --export resolve
 Error! Timeline is empty, nothing to do.
 ```
 
