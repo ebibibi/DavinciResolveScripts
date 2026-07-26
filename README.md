@@ -52,6 +52,23 @@ DaVinci Resolve can still be used for final review or manual corrections, but
 Text+, Fusion, topic labels, and timeline manipulation are not part of this
 advanced pipeline.
 
+### Watching a run
+
+The advanced run takes many minutes, so every step reports itself while it
+works. Each stage is numbered, and long steps show a percentage, the position
+in the media and an ETA:
+
+```text
+[3/5] Transcribing the cut master (whisper) ... started
+    Transcribing the cut master (whisper)   43.0%  00:13 / 00:30  elapsed 00:10  eta 00:14
+    done in 00:46 (128 segments)
+```
+
+A step that produces no output of its own, such as the Claude call, prints a
+heartbeat every 20 seconds so a slow run is never mistaken for a hang. Use
+`--heartbeat-seconds` to change that interval, and `--quiet` to suppress the
+report entirely when another script only needs the final path from stdout.
+
 ## Requirements
 
 - Python 3.10 or later

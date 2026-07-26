@@ -3,47 +3,53 @@
 
 import argparse
 import json
-import math
 import os
-import re
 import shlex
 import shutil
 import subprocess
 import sys
+from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
-SCHEMA_VERSION = 1
-KEY_PHRASES = (
-    "結論",
-    "重要",
-    "ポイント",
-    "つまり",
-    "要するに",
-    "実際に",
-    "理由",
-    "意外",
-    "できます",
-    "解決",
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from highlight_plan import (  # noqa: E402
+    Highlight,
+    HighlightPlan,
+    _limit_total_duration,
+    ai_plan_schema,
+    build_local_plan,
+    build_manual_plan,
+    clean_text,
+    desired_highlight_count,
+    parse_ai_plan,
+    shorten_text,
 )
+from progress import ProgressReporter, format_clock  # noqa: E402
 
+SCHEMA_VERSION = 1
+MAXIMUM_CAPTURED_LINES = 400
 
-@dataclass(frozen=True)
-class Highlight:
-    """A copied range on the cut-master timeline."""
-
-    start: float
-    end: float
-    text: str = ""
-
-
-@dataclass(frozen=True)
-class HighlightPlan:
-    """The takeaway title and ordered opening highlight ranges."""
-
-    title: str
-    highlights: tuple[Highlight, ...]
+__all__ = [
+    "Highlight",
+    "HighlightPlan",
+    "PipelineConfig",
+    "VideoInfo",
+    "ai_plan_schema",
+    "build_ai_plan",
+    "build_local_plan",
+    "build_manual_plan",
+    "clean_text",
+    "desired_highlight_count",
+    "main",
+    "parse_ai_plan",
+    "run_pipeline",
+    "shorten_text",
+]
 
 
 @dataclass(frozen=True)
@@ -70,204 +76,6 @@ class PipelineConfig:
     manual_title: str = ""
     manual_highlights: tuple[dict[str, float], ...] = ()
     transcript_command: tuple[str, ...] = ()
-
-
-def clean_text(value: Any) -> str:
-    """Collapse whitespace and remove control characters."""
-    text = re.sub(r"[\x00-\x1f\x7f]", " ", str(value or ""))
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def shorten_text(value: Any, maximum: int = 48) -> str:
-    """Return a display-safe single-line title."""
-    text = clean_text(value).strip("「」『』、。,.!? ")
-    if len(text) <= maximum:
-        return text
-    return text[: max(1, maximum - 1)].rstrip() + "…"
-
-
-def desired_highlight_count(duration: float, *, maximum: int) -> int:
-    """Use more opening highlights for longer videos."""
-    maximum = max(1, int(maximum))
-    if duration >= 45 * 60:
-        return min(3, maximum)
-    if duration >= 20 * 60:
-        return min(2, maximum)
-    return 1
-
-
-def _bounded_highlight(
-    segment: dict[str, Any],
-    *,
-    duration: float,
-    padding_seconds: float,
-    maximum_segment_seconds: float,
-) -> Highlight | None:
-    try:
-        start = float(segment.get("start", 0))
-        end = float(segment.get("end", start))
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(start) or not math.isfinite(end) or end <= start:
-        return None
-    start = max(0.0, start - max(0.0, padding_seconds))
-    end = min(duration, end + max(0.0, padding_seconds))
-    end = min(end, start + max(1.0, maximum_segment_seconds))
-    if end - start < 0.5:
-        return None
-    return Highlight(start, end, clean_text(segment.get("text", "")))
-
-
-def _extract_structured_output(output: str) -> dict[str, Any]:
-    payload = json.loads(output)
-    data = payload.get("structured_output", payload)
-    if isinstance(data, dict) and "highlight_segment_indexes" in data:
-        return data
-    result = payload.get("result") if isinstance(payload, dict) else None
-    if isinstance(result, str):
-        nested = json.loads(result)
-        if isinstance(nested, dict):
-            return nested
-    raise ValueError("AI output does not contain a highlight plan")
-
-
-def parse_ai_plan(
-    output: str,
-    segments: list[dict[str, Any]],
-    *,
-    desired_count: int,
-    padding_seconds: float,
-    maximum_segment_seconds: float,
-) -> HighlightPlan:
-    """Validate a grounded Claude plan against Whisper segments."""
-    data = _extract_structured_output(output)
-    duration = max((float(item.get("end", 0)) for item in segments), default=0.0)
-    selected: list[Highlight] = []
-    seen: set[int] = set()
-    indexes = data.get("highlight_segment_indexes", [])
-    for raw_index in indexes if isinstance(indexes, list) else []:
-        if not isinstance(raw_index, int) or raw_index in seen:
-            continue
-        if not 0 <= raw_index < len(segments):
-            continue
-        seen.add(raw_index)
-        item = _bounded_highlight(
-            segments[raw_index],
-            duration=duration,
-            padding_seconds=padding_seconds,
-            maximum_segment_seconds=maximum_segment_seconds,
-        )
-        if item is not None:
-            selected.append(item)
-        if len(selected) >= max(1, desired_count):
-            break
-    return HighlightPlan(
-        title=shorten_text(data.get("main_takeaway", "")),
-        highlights=tuple(selected),
-    )
-
-
-def _segment_score(segment: dict[str, Any], index: int) -> tuple[float, int]:
-    text = clean_text(segment.get("text", ""))
-    score = sum(5 for phrase in KEY_PHRASES if phrase in text)
-    score += 3 if re.search(r"\d", text) else 0
-    score += 2 if 12 <= len(text) <= 55 else 0
-    score += min(3, len(re.findall(r"[A-Za-z][A-Za-z0-9+.-]{2,}", text)))
-    return float(score), -index
-
-
-def build_local_plan(
-    segments: list[dict[str, Any]],
-    *,
-    video_duration: float,
-    maximum_highlights: int,
-    padding_seconds: float,
-    maximum_segment_seconds: float,
-    minimum_gap_seconds: float,
-) -> HighlightPlan:
-    """Select deterministic highlights when Claude is unavailable."""
-    count = desired_highlight_count(video_duration, maximum=maximum_highlights)
-    ranked = sorted(
-        enumerate(segments),
-        key=lambda item: _segment_score(item[1], item[0]),
-        reverse=True,
-    )
-    selected: list[Highlight] = []
-    for _, segment in ranked:
-        candidate = _bounded_highlight(
-            segment,
-            duration=video_duration,
-            padding_seconds=padding_seconds,
-            maximum_segment_seconds=maximum_segment_seconds,
-        )
-        if candidate is None or not candidate.text:
-            continue
-        if any(
-            abs(candidate.start - existing.start) < max(0.0, minimum_gap_seconds)
-            for existing in selected
-        ):
-            continue
-        selected.append(candidate)
-        if len(selected) >= count:
-            break
-    selected.sort(key=lambda item: item.start)
-    strongest = max(
-        selected, key=lambda item: _segment_score({"text": item.text}, 0), default=None
-    )
-    return HighlightPlan(
-        title=shorten_text(strongest.text if strongest else ""),
-        highlights=tuple(selected),
-    )
-
-
-def build_manual_plan(
-    *,
-    title: str,
-    highlights: Sequence[dict[str, Any]],
-    video_duration: float,
-    maximum_highlights: int,
-    maximum_total_seconds: float,
-) -> HighlightPlan:
-    """Build a validated deterministic plan from manual ranges."""
-    selected: list[Highlight] = []
-    total = 0.0
-    for raw in highlights:
-        item = _bounded_highlight(
-            raw,
-            duration=video_duration,
-            padding_seconds=0.0,
-            maximum_segment_seconds=max(1.0, maximum_total_seconds),
-        )
-        if item is None:
-            continue
-        remaining = maximum_total_seconds - total
-        if remaining < 0.5:
-            break
-        if item.end - item.start > remaining:
-            item = Highlight(item.start, item.start + remaining, item.text)
-        if any(item.start < old.end and old.start < item.end for old in selected):
-            continue
-        selected.append(item)
-        total += item.end - item.start
-        if len(selected) >= max(1, maximum_highlights):
-            break
-    return HighlightPlan(shorten_text(title), tuple(selected))
-
-
-def ai_plan_schema() -> dict[str, Any]:
-    """Return the strict Claude structured-output schema."""
-    return {
-        "type": "object",
-        "properties": {
-            "main_takeaway": {"type": "string"},
-            "highlight_segment_indexes": {
-                "type": "array",
-                "items": {"type": "integer"},
-            },
-        },
-        "required": ["main_takeaway", "highlight_segment_indexes"],
-        "additionalProperties": False,
-    }
 
 
 def build_ai_plan(
@@ -335,9 +143,51 @@ def build_ai_plan(
         return None
 
 
-def _run(
-    command: Sequence[str], *, cwd: Path | None = None
+def _stream_process(
+    command: Sequence[str],
+    *,
+    cwd: Path | None,
+    reporter: ProgressReporter,
 ) -> subprocess.CompletedProcess[str]:
+    """Run a child process while echoing its output as it arrives.
+
+    Text mode translates the carriage returns that video tools use to redraw
+    their progress bars, so every bar update reaches the reporter as a line.
+    """
+    process = subprocess.Popen(
+        list(command),
+        cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    if process.stdout is None:
+        process.kill()
+        raise RuntimeError(f"could not read the output of {command[0]}")
+    captured: deque[str] = deque(maxlen=MAXIMUM_CAPTURED_LINES)
+    with process.stdout as pipe:
+        for line in pipe:
+            captured.append(line)
+            reporter.child_output(line)
+    returncode = process.wait()
+    output = "".join(captured)
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, list(command), output, "")
+    return subprocess.CompletedProcess(list(command), returncode, output, "")
+
+
+def _run(
+    command: Sequence[str],
+    *,
+    cwd: Path | None = None,
+    reporter: ProgressReporter | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command, streaming its output when a reporter is watching."""
+    if reporter is not None:
+        return _stream_process(command, cwd=cwd, reporter=reporter)
     return subprocess.run(
         list(command),
         cwd=str(cwd) if cwd else None,
@@ -350,12 +200,18 @@ def _run(
     )
 
 
-def render_cut_master(source: Path, output_dir: Path) -> Path:
+def render_cut_master(
+    source: Path,
+    output_dir: Path,
+    reporter: ProgressReporter | None = None,
+) -> Path:
     """Render the proven auto-editor silence cut as one high-quality MP4."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{source.stem}.cut_master.mp4"
     for edit_method in ("audio:threshold=3%", "none"):
-        command = ["auto-editor", str(source)]
+        # Without --no-open, auto-editor launches the media player on the cut
+        # master and the rest of the pipeline keeps running behind it.
+        command = ["auto-editor", str(source), "--no-open"]
         if edit_method != "none":
             command.extend(["--margin", "0.2sec"])
         command.extend(
@@ -375,10 +231,12 @@ def render_cut_master(source: Path, output_dir: Path) -> Path:
             ]
         )
         try:
-            _run(command, cwd=source.parent)
+            _run(command, cwd=source.parent, reporter=reporter)
         except subprocess.CalledProcessError as error:
             diagnostic = f"{error.stdout}\n{error.stderr}"
             if edit_method != "none" and "Timeline is empty" in diagnostic:
+                if reporter is not None:
+                    reporter.warn("silence cut emptied the timeline, keeping every cut")
                 continue
             raise
         if output.exists() and output.stat().st_size > 0:
@@ -391,6 +249,7 @@ def transcribe_cut_master(
     source: Path,
     output_dir: Path,
     command_template: Sequence[str] = (),
+    reporter: ProgressReporter | None = None,
 ) -> Path:
     """Transcribe the cut master so all timestamps match the final body."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -417,7 +276,7 @@ def transcribe_cut_master(
             "--fp16",
             "False",
         ]
-    _run(command, cwd=output_dir)
+    _run(command, cwd=output_dir, reporter=reporter)
     expected = output_dir / f"{source.stem}.json"
     if expected.exists():
         return expected
@@ -542,6 +401,12 @@ def build_ffmpeg_command(
     return [
         "ffmpeg",
         "-y",
+        # Drop the build banner but keep -stats, so the console shows the
+        # encoding position instead of pages of library versions.
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-stats",
         "-i",
         str(source),
         "-filter_complex",
@@ -571,13 +436,18 @@ def render_highlight_video(
     subtitle: Path,
     output: Path,
     plan: HighlightPlan,
+    reporter: ProgressReporter | None = None,
 ) -> Path:
     """Render the final highlight-first MP4 and reject partial output."""
     if not shutil.which("ffmpeg"):
         raise FileNotFoundError("ffmpeg command was not found")
     if output.exists():
         output.unlink()
-    _run(build_ffmpeg_command(source, subtitle, output, plan), cwd=subtitle.parent)
+    _run(
+        build_ffmpeg_command(source, subtitle, output, plan),
+        cwd=subtitle.parent,
+        reporter=reporter,
+    )
     if not output.exists() or output.stat().st_size == 0:
         raise RuntimeError("ffmpeg did not create a usable highlighted video")
     return output
@@ -587,18 +457,6 @@ def _read_segments(path: Path) -> list[dict[str, Any]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     segments = data.get("segments", []) if isinstance(data, dict) else []
     return [item for item in segments if isinstance(item, dict)]
-
-
-def _limit_total_duration(plan: HighlightPlan, maximum: float) -> HighlightPlan:
-    selected: list[Highlight] = []
-    remaining = max(1.0, maximum)
-    for item in plan.highlights:
-        duration = min(item.end - item.start, remaining)
-        if duration < 0.5:
-            break
-        selected.append(Highlight(item.start, item.start + duration, item.text))
-        remaining -= duration
-    return HighlightPlan(plan.title, tuple(selected))
 
 
 def _write_manifest(
@@ -634,16 +492,67 @@ def _write_manifest(
     )
 
 
-def run_pipeline(source: Path, output_dir: Path, config: PipelineConfig) -> Path:
+def _pipeline_steps(config: PipelineConfig) -> tuple[str, ...]:
+    """Name every stage so the console can show real progress."""
+    common = ("Removing silence (auto-editor)", "Reading video properties (ffprobe)")
+    tail = ("Rendering the highlight video (ffmpeg)",)
+    if config.manual_title and config.manual_highlights:
+        return common + ("Applying the manual highlight ranges",) + tail
+    return (
+        common
+        + ("Transcribing the cut master (whisper)", "Choosing highlights (claude)")
+        + tail
+    )
+
+
+def _select_plan(
+    segments: list[dict[str, Any]],
+    *,
+    video_duration: float,
+    config: PipelineConfig,
+    reporter: ProgressReporter,
+) -> HighlightPlan:
+    """Prefer the grounded Claude plan and fall back to the local ranking."""
+    plan = build_ai_plan(segments, video_duration=video_duration, config=config)
+    if plan is not None:
+        return plan
+    reporter.warn("claude returned no usable plan, ranking the segments locally")
+    return build_local_plan(
+        segments,
+        video_duration=video_duration,
+        maximum_highlights=config.maximum_highlights,
+        padding_seconds=config.padding_seconds,
+        maximum_segment_seconds=config.maximum_segment_seconds,
+        minimum_gap_seconds=config.minimum_gap_seconds,
+    )
+
+
+def run_pipeline(
+    source: Path,
+    output_dir: Path,
+    config: PipelineConfig,
+    reporter: ProgressReporter | None = None,
+) -> Path:
     """Run cut -> transcribe -> select -> prepend -> title rendering."""
+    reporter = reporter if reporter is not None else ProgressReporter(enabled=False)
+    steps = _pipeline_steps(config)
     source = source.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    cut_master = render_cut_master(source, output_dir)
+
+    reporter.start_stage(steps[0], step=1, steps=len(steps))
+    cut_master = render_cut_master(source, output_dir, reporter)
+    reporter.finish_stage(cut_master.name)
+
+    reporter.start_stage(steps[1], step=2, steps=len(steps))
     video = probe_video(cut_master)
+    reporter.finish_stage(
+        f"{video.width}x{video.height}, {format_clock(video.duration)} long"
+    )
     transcript: Path | None = None
     plan: HighlightPlan
 
     if config.manual_title and config.manual_highlights:
+        reporter.start_stage(steps[2], step=3, steps=len(steps))
         plan = build_manual_plan(
             title=config.manual_title,
             highlights=config.manual_highlights,
@@ -651,12 +560,17 @@ def run_pipeline(source: Path, output_dir: Path, config: PipelineConfig) -> Path
             maximum_highlights=config.maximum_highlights,
             maximum_total_seconds=config.maximum_total_highlight_seconds,
         )
+        reporter.finish_stage(f"{len(plan.highlights)} highlights")
     else:
+        reporter.start_stage(
+            steps[2], step=3, steps=len(steps), total_seconds=video.duration
+        )
         try:
             transcript = transcribe_cut_master(
                 cut_master,
                 output_dir,
                 config.transcript_command,
+                reporter,
             )
             segments = _read_segments(transcript)
         except (
@@ -665,6 +579,8 @@ def run_pipeline(source: Path, output_dir: Path, config: PipelineConfig) -> Path
             subprocess.SubprocessError,
             json.JSONDecodeError,
         ) as error:
+            reporter.finish_stage("failed")
+            reporter.warn(f"transcription failed, keeping the cut master: {error}")
             fallback = HighlightPlan("", ())
             _write_manifest(
                 output_dir,
@@ -677,18 +593,19 @@ def run_pipeline(source: Path, output_dir: Path, config: PipelineConfig) -> Path
                 fallback_reason=f"transcription_failed: {error}",
             )
             return cut_master
-        plan = build_ai_plan(
-            segments, video_duration=video.duration, config=config
-        ) or build_local_plan(
+        reporter.finish_stage(f"{len(segments)} segments")
+
+        reporter.start_stage(steps[3], step=4, steps=len(steps))
+        plan = _select_plan(
             segments,
             video_duration=video.duration,
-            maximum_highlights=config.maximum_highlights,
-            padding_seconds=config.padding_seconds,
-            maximum_segment_seconds=config.maximum_segment_seconds,
-            minimum_gap_seconds=config.minimum_gap_seconds,
+            config=config,
+            reporter=reporter,
         )
+        reporter.finish_stage(f"{len(plan.highlights)} highlights, title: {plan.title}")
     plan = _limit_total_duration(plan, config.maximum_total_highlight_seconds)
     if not plan.title or not plan.highlights:
+        reporter.warn("no usable highlight plan, keeping the cut master")
         _write_manifest(
             output_dir,
             source=source,
@@ -715,9 +632,18 @@ def run_pipeline(source: Path, output_dir: Path, config: PipelineConfig) -> Path
         font_size=config.font_size,
     )
     output = output_dir / f"{source.stem}.highlighted.mp4"
+    highlight_seconds = sum(item.end - item.start for item in plan.highlights)
+    reporter.start_stage(
+        steps[-1],
+        step=len(steps),
+        steps=len(steps),
+        total_seconds=video.duration + highlight_seconds,
+    )
     try:
-        rendered = render_highlight_video(cut_master, subtitle, output, plan)
+        rendered = render_highlight_video(cut_master, subtitle, output, plan, reporter)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        reporter.finish_stage("failed")
+        reporter.warn(f"rendering failed, keeping the cut master: {error}")
         if output.exists():
             output.unlink()
         _write_manifest(
@@ -731,6 +657,7 @@ def run_pipeline(source: Path, output_dir: Path, config: PipelineConfig) -> Path
             fallback_reason=f"render_failed: {error}",
         )
         return cut_master
+    reporter.finish_stage(rendered.name)
     _write_manifest(
         output_dir,
         source=source,
@@ -788,12 +715,32 @@ def latest_recording(paths: Sequence[Path]) -> Path:
     return max(candidates, key=lambda item: item.stat().st_mtime)
 
 
+def _use_replacement_characters() -> None:
+    """Stop a legacy console encoding from killing the run mid-render."""
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", nargs="?", type=Path)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="hide the stage progress report and print only the result path",
+    )
+    parser.add_argument(
+        "--heartbeat-seconds",
+        type=float,
+        default=20.0,
+        help="how long a silent step may run before it reports it is alive",
+    )
     args = parser.parse_args(argv)
+    _use_replacement_characters()
     script_dir = Path(__file__).resolve().parent
     config_path = args.config
     if config_path is None:
@@ -815,7 +762,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         or configured_output
         or source.parent / "_highlight_output" / source.stem
     )
-    result = run_pipeline(source, output_dir, config)
+    reporter = ProgressReporter(
+        enabled=not args.quiet,
+        heartbeat_seconds=args.heartbeat_seconds,
+    )
+    if not args.quiet:
+        print(f"Source: {source}")
+        print(f"Output directory: {output_dir}")
+    result = run_pipeline(source, output_dir, config, reporter)
+    reporter.summary()
     print(result)
     return 0
 
