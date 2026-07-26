@@ -249,7 +249,7 @@ def test_pipeline_writes_review_plan_and_returns_rendered_output(
         lambda _path: HIGHLIGHT_VIDEO.VideoInfo(3600.0, 1920, 1080),
     )
 
-    def fake_render(_source, _ass, output, _plan):
+    def fake_render(_source, _ass, output, _plan, _reporter=None):
         output.write_bytes(b"rendered")
         return output
 
@@ -296,7 +296,7 @@ def test_manual_pipeline_does_not_require_whisper_or_claude(
         lambda *_args, **_kwargs: pytest.fail("manual ranges must bypass Claude"),
     )
 
-    def fake_render(_source, _subtitle, output, _plan):
+    def fake_render(_source, _subtitle, output, _plan, _reporter=None):
         output.write_bytes(b"rendered")
         return output
 
@@ -370,7 +370,7 @@ def test_render_failure_deletes_partial_and_keeps_cut_master(
         lambda _path: HIGHLIGHT_VIDEO.VideoInfo(3600.0, 1920, 1080),
     )
 
-    def failing_render(_source, _subtitle, output, _plan):
+    def failing_render(_source, _subtitle, output, _plan, _reporter=None):
         output.write_bytes(b"partial")
         raise subprocess.CalledProcessError(1, ["ffmpeg"])
 
@@ -400,7 +400,7 @@ def test_render_cut_master_retries_empty_timeline_without_margin(
     source.write_bytes(b"source")
     calls = []
 
-    def fake_run(command, *, cwd=None):
+    def fake_run(command, *, cwd=None, reporter=None):
         calls.append(command)
         if len(calls) == 1:
             error = subprocess.CalledProcessError(1, command)
@@ -431,7 +431,7 @@ def test_custom_transcript_command_expands_placeholders(
     output_dir = tmp_path / "transcript"
     calls = []
 
-    def fake_run(command, *, cwd=None):
+    def fake_run(command, *, cwd=None, reporter=None):
         calls.append((command, cwd))
         (output_dir / "cut master.json").write_text(
             '{"segments": []}', encoding="utf-8"
@@ -523,7 +523,7 @@ def test_main_uses_explicit_input_and_output(tmp_path: Path, monkeypatch) -> Non
     expected = output_dir / "final.mp4"
     calls = []
 
-    def fake_pipeline(actual_source, actual_output, config):
+    def fake_pipeline(actual_source, actual_output, config, _reporter=None):
         calls.append((actual_source, actual_output, config))
         return expected
 
