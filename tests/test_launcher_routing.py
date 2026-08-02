@@ -43,3 +43,28 @@ def test_shortcut_creator_exposes_both_routes_with_clear_names() -> None:
     assert 'Name = "DaVinci Resolve Auto Editor - Stable.lnk"' in content
     assert 'File = "run_advanced_auto_video_editor.ps1"' in content
     assert 'Name = "DaVinci Resolve Auto Editor - Advanced.lnk"' in content
+
+
+def test_dual_source_launcher_routes_only_to_its_own_editor() -> None:
+    launcher = SCRIPT_DIR / "run_dual_source_video_editor.ps1"
+    content = launcher.read_text(encoding="utf-8")
+
+    # The script name is passed explicitly and relatively, like the advanced route.
+    assert '$Arguments = @("dual_source_video_editor.py")' in content
+    assert "auto_video_editor.py" not in content
+    assert "highlight_video.py" not in content
+
+
+def test_the_stable_launcher_did_not_take_on_the_dual_source_route() -> None:
+    stable = (SCRIPT_DIR / "run_auto_video_editor.ps1").read_text(encoding="utf-8")
+    stable_editor = (SCRIPT_DIR / "auto_video_editor.py").read_text(encoding="utf-8")
+
+    assert "dual_source" not in stable
+    assert "dual_source" not in stable_editor
+
+
+def test_shortcut_creator_exposes_the_dual_source_route() -> None:
+    content = (SCRIPT_DIR / "create_desktop_shortcut.ps1").read_text(encoding="utf-8")
+
+    assert 'File = "run_dual_source_video_editor.ps1"' in content
+    assert 'Name = "DaVinci Resolve Auto Editor - Dual Source.lnk"' in content

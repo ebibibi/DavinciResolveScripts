@@ -1,18 +1,21 @@
 # DaVinci Resolve Auto Editors
 
-This repository provides two explicit editing routes for long-form YouTube videos.
-The stable route preserves the long-running DaVinci Resolve workflow, while the
-advanced route is where new automation is developed and tested.
+This repository provides three explicit editing routes for long-form YouTube
+videos. The stable route preserves the long-running DaVinci Resolve workflow,
+the dual source route edits a screen capture and a camera file as one timeline,
+and the advanced route is where new automation is developed and tested.
 
 ## Choose a workflow
 
 | Route | Run this | Use it when |
 |---|---|---|
-| **Stable** | `有償版用スクリプト/run_auto_video_editor.ps1` | The recording only needs proven silence removal and the standard Resolve template timeline. |
+| **Stable** | `有償版用スクリプト/run_auto_video_editor.ps1` | The recording is one file and only needs proven silence removal and the standard Resolve template timeline. |
+| **Dual source** | `有償版用スクリプト/run_dual_source_video_editor.ps1` | The recording folder holds one `.mkv` screen capture and one `.mp4` camera file that belong on V1 and V2. |
 | **Advanced** | `有償版用スクリプト/run_advanced_auto_video_editor.ps1` | You intentionally want to try the latest highlight, title, or other experimental features. |
 
 The familiar `run_auto_video_editor.ps1` name deliberately remains attached to
-the stable workflow. New features must not silently change its output.
+the stable workflow. New features must not silently change its output — each
+route names its own Python entry point and nothing else.
 
 ## Stable workflow
 
@@ -28,6 +31,38 @@ DaVinci Resolve process:
    ending clip.
 
 Use this route when the instruction is effectively “do nothing extra.”
+
+## Dual source workflow
+
+`run_dual_source_video_editor.ps1` runs `dual_source_video_editor.py` for a
+lecture recorded as two files in one folder, for example `!OBS録画/az900-3/`:
+
+1. Take the newest subfolder holding exactly one `.mkv` and one `.mp4`.
+2. Align the two files by correlating their audio, and stop if they do not match.
+3. Run `auto-editor` once, on the camera file that carries the microphone, and
+   read the surviving segments from its JSON cut list.
+4. Place every segment three times at the same timeline frame: the slide capture
+   on V1, the camera on V2, and the camera audio on A1. The slide audio is not
+   used.
+5. Apply the camera and slide placement measured from the AZ-900 project.
+6. Append the template's ending clip after the last segment.
+
+The folder can also be given explicitly:
+
+```powershell
+& ".\有償版用スクリプト\run_dual_source_video_editor.ps1" --folder "C:\...\!OBS録画\az900-3"
+```
+
+Smooth Cut and the green screen key remain manual, because the Resolve scripting
+API can add neither transitions nor Edit page effects. See
+[docs/dual-source-editing-plan.md](docs/dual-source-editing-plan.md) and
+[ADR-009](docs/adr/009-give-dual-source-editing-its-own-script-and-launcher.md).
+
+The measured offset can also be checked on its own:
+
+```powershell
+python "有償版用スクリプト/audio_sync.py" slides.mkv camera.mp4
+```
 
 ## Advanced workflow
 
@@ -72,6 +107,7 @@ report entirely when another script only needs the final path from stdout.
 ## Requirements
 
 - Python 3.10 or later
+- NumPy (installed with auto-editor)
 - [auto-editor](https://auto-editor.com/)
 - FFmpeg and ffprobe with libass support
 - Whisper CLI for automatic transcription
@@ -95,8 +131,8 @@ For the advanced workflow:
 4. Review the generated MP4 and `highlight_plan.json` under
    `_highlight_output/<recording name>/`.
 
-Run `有償版用スクリプト/create_desktop_shortcut.ps1` once to create
-separate **Stable** and **Advanced** desktop shortcuts.
+Run `有償版用スクリプト/create_desktop_shortcut.ps1` once to create separate
+**Stable**, **Dual Source** and **Advanced** desktop shortcuts.
 
 You can also pass a recording explicitly:
 
@@ -154,9 +190,12 @@ Manual highlights use cut-master timestamps and bypass Whisper and Claude.
 ## Stability boundary
 
 `有償版用スクリプト/auto_video_editor.py` is the protected stable entry point.
-Experimental work belongs in `highlight_video.py` or a future advanced module,
-called only by `run_advanced_auto_video_editor.ps1`. The free-edition script is
-kept as a separate legacy utility.
+Every other workflow lives in its own module, named explicitly by its own
+launcher: `dual_source_video_editor.py` for the slides plus camera edit and
+`highlight_video.py` for the advanced route. `resolve_session.py` holds the
+Resolve bootstrap those newer entry points share; the stable editor keeps its
+own copy on purpose, so changing one cannot move the other. The free-edition
+script is kept as a separate legacy utility.
 
 ## Tests
 
