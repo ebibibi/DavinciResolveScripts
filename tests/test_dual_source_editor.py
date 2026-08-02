@@ -266,7 +266,7 @@ def test_the_cut_list_is_written_next_to_the_recording(pair, tmp_path, monkeypat
     document = EDITOR.run_auto_editor_cut_list(pair.camera, output)
 
     assert document["version"] == "3"
-    assert output.exists()
+    assert (pair.folder / "_auto_editor_cuts.v3").exists()
     assert EDITOR.dual_source.SILENCE_MARGIN in recorded["command"]
     assert EDITOR.dual_source.SILENCE_EDIT in recorded["command"]
 
@@ -336,3 +336,58 @@ def test_a_real_auto_editor_failure_is_not_retried_as_a_version_problem(pair, mo
 
     assert EDITOR.run_auto_editor_cut_list(pair.camera, pair.folder / "cuts.json") is None
     assert len(attempts) == 1
+
+
+def test_the_cut_list_is_found_even_though_v3_renames_the_file(pair, monkeypatch):
+    """Current auto-editor rewrites the --output extension to .v3."""
+
+    def fake_run(command, capture_output, text, check):
+        requested = Path(command[command.index("--output") + 1])
+        # Whatever was asked for, this version writes a .v3 file.
+        requested.with_suffix(".v3").write_text(
+            json.dumps({"version": "3", "timebase": "60/1", "v": [[]]}), encoding="utf-8"
+        )
+
+        class Result:
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    document = EDITOR.run_auto_editor_cut_list(
+        pair.camera, pair.folder / "_auto_editor_cuts.json"
+    )
+
+    assert document["timebase"] == "60/1"
+
+
+def test_a_run_that_writes_nothing_is_reported_instead_of_crashing(pair, monkeypatch):
+    def fake_run(command, capture_output, text, check):
+        class Result:
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    assert EDITOR.run_auto_editor_cut_list(
+        pair.camera, pair.folder / "_auto_editor_cuts.json"
+    ) is None
+
+
+def test_a_stale_cut_list_from_a_previous_run_is_not_read(pair, monkeypatch):
+    stale = pair.folder / "_auto_editor_cuts.v3"
+    stale.write_text(json.dumps({"version": "3", "timebase": "1/1", "v": [[]]}), encoding="utf-8")
+
+    def fake_run(command, capture_output, text, check):
+        raise EDITOR.subprocess.CalledProcessError(1, command, stderr="Error! Boom")
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    assert EDITOR.run_auto_editor_cut_list(
+        pair.camera, pair.folder / "_auto_editor_cuts.json"
+    ) is None
+    assert not stale.exists()

@@ -31,7 +31,10 @@ stable single source editor is untouched. See
 3. **Find the silence.** Run `auto-editor` once, on the camera file that carries
    the microphone, with the proven `audio:threshold=1%` and `--margin 0.3sec`.
    The export that prints a v3 timeline is named `v3` on current versions and
-   `json` on older ones, so both are tried in that order. The result describes
+   `json` on older ones, so both are tried in that order. Current auto-editor
+   also rewrites the `--output` extension to `.v3` regardless of what was asked
+   for, so the file that was actually written is looked up rather than assumed,
+   and any leftover from a previous run is deleted first. The result describes
    every surviving segment as `{start, dur, offset}` — a machine readable cut
    list rather than a finished timeline.
 4. **Build both tracks.** Each surviving segment becomes three
