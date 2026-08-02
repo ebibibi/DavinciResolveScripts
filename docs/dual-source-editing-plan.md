@@ -13,14 +13,16 @@ The two files start at different moments, so they have to be aligned before
 anything else happens. Both carry the same voice, which is the only reliable way
 to align them without a clapperboard.
 
-The route is selected by that shape, not by a launcher or a flag. See
-[ADR-009](adr/009-detect-the-dual-source-shape-inside-the-stable-route.md).
+This route has its own entry point, `dual_source_video_editor.py`, started by
+`run_dual_source_video_editor.ps1`, which names that script explicitly. The
+stable single source editor is untouched. See
+[ADR-009](adr/009-give-dual-source-editing-its-own-script-and-launcher.md).
 
 ## Pipeline
 
 1. **Pick the pair.** Take the newest subfolder that holds exactly one `.mkv`
-   and one `.mp4`. Anything else falls back to the existing single source
-   behavior, so old recordings keep editing exactly as before.
+   and one `.mp4`, or the folder named by `--folder`. Anything else stops the
+   run with a pointer to the stable launcher, rather than editing half of it.
 2. **Align the audio.** `audio_sync.py` decodes both files to 8 kHz mono,
    reduces each to a loudness envelope at 200 points per second, and correlates
    them. The result is the point in the camera file that matches time zero of

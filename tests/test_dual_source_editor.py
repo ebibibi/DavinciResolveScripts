@@ -13,10 +13,12 @@ import pytest
 
 SCRIPT_DIR = Path(__file__).parents[1] / "有償版用スクリプト"
 sys.path.insert(0, str(SCRIPT_DIR))
-SPEC = importlib.util.spec_from_file_location("auto_video_editor", SCRIPT_DIR / "auto_video_editor.py")
+SPEC = importlib.util.spec_from_file_location(
+    "dual_source_video_editor", SCRIPT_DIR / "dual_source_video_editor.py"
+)
 EDITOR = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
-sys.modules["auto_video_editor"] = EDITOR
+sys.modules["dual_source_video_editor"] = EDITOR
 SPEC.loader.exec_module(EDITOR)
 
 FRAME_RATE = 30.0
@@ -162,7 +164,7 @@ def test_the_dual_route_places_both_tracks_and_sizes_the_camera(pair, stub_pipel
     media_pool = FakeMediaPool({"PPT.mkv": 100000, "camera.mp4": 100000})
     timeline = FakeTimeline([FakeItem("01_EBI_CHAN_OP.mov", end=300)])
 
-    assert EDITOR.run_dual_source_edit(FakeProject(), media_pool, timeline, pair, 300)
+    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, timeline, pair, 300)
 
     clip_infos = media_pool.appended[0]
     slides = [c for c in clip_infos if c["trackIndex"] == 1 and c["mediaType"] == 1]
@@ -178,7 +180,7 @@ def test_the_dual_route_places_both_tracks_and_sizes_the_camera(pair, stub_pipel
 def test_the_audio_comes_from_the_camera_file_only(pair, stub_pipeline):
     media_pool = FakeMediaPool({"PPT.mkv": 100000, "camera.mp4": 100000})
 
-    EDITOR.run_dual_source_edit(FakeProject(), media_pool, FakeTimeline([]), pair, 0)
+    EDITOR.build_dual_source_timeline(FakeProject(), media_pool, FakeTimeline([]), pair, 0)
 
     audio = [c for c in media_pool.appended[0] if c["mediaType"] == 2]
     assert {c["mediaPoolItem"].GetName() for c in audio} == {"camera.mp4"}
@@ -196,7 +198,7 @@ def test_a_frame_rate_mismatch_stops_the_run(pair, stub_pipeline, monkeypatch):
     )
     media_pool = FakeMediaPool({})
 
-    assert EDITOR.run_dual_source_edit(FakeProject(), media_pool, FakeTimeline([]), pair, 0) is False
+    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, FakeTimeline([]), pair, 0) is False
     assert media_pool.appended == []
 
 
@@ -207,7 +209,7 @@ def test_a_failed_sync_stops_the_run_instead_of_guessing(pair, stub_pipeline, mo
     monkeypatch.setattr(EDITOR.audio_sync, "estimate_offset", refuse)
     media_pool = FakeMediaPool({})
 
-    assert EDITOR.run_dual_source_edit(FakeProject(), media_pool, FakeTimeline([]), pair, 0) is False
+    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, FakeTimeline([]), pair, 0) is False
     assert media_pool.appended == []
 
 
@@ -224,7 +226,7 @@ def test_the_measured_placement_is_applied_to_every_clip(pair, stub_pipeline):
 
     media_pool.AppendToTimeline = remember
 
-    EDITOR.run_dual_source_edit(FakeProject(), media_pool, FakeTimeline([]), pair, 0)
+    EDITOR.build_dual_source_timeline(FakeProject(), media_pool, FakeTimeline([]), pair, 0)
 
     sized = [item for item in appended if item.properties]
     assert len(sized) == 4  # two slide clips and two camera clips
@@ -258,3 +260,29 @@ def test_the_cut_list_is_written_next_to_the_recording(pair, tmp_path, monkeypat
     assert output.exists()
     assert "--margin" in recorded["command"] and "0.2sec" in recorded["command"]
     assert "audio:threshold=3%" in recorded["command"]
+
+
+def test_the_entry_point_refuses_a_folder_that_is_not_a_pair(tmp_path, capsys):
+    folder = tmp_path / "single"
+    folder.mkdir()
+    (folder / "talk.mkv").write_bytes(b"")
+
+    assert EDITOR.main(["--folder", str(folder)]) == 1
+
+    assert "mkv 1本 + mp4 1本" in capsys.readouterr().out
+
+
+def test_the_entry_point_points_at_the_stable_launcher_when_no_pair_exists(tmp_path, capsys):
+    (tmp_path / "loose.mkv").write_bytes(b"")
+
+    assert EDITOR.main(["--recording-dir", str(tmp_path)]) == 1
+
+    assert "run_auto_video_editor.ps1" in capsys.readouterr().out
+
+
+def test_a_missing_recording_dir_is_reported(capsys, monkeypatch):
+    monkeypatch.setattr(EDITOR, "RECORDING_DIR_CANDIDATES", [])
+
+    assert EDITOR.main([]) == 1
+
+    assert "OBS録画フォルダが見つかりません" in capsys.readouterr().out
