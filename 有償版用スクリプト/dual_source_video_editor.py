@@ -47,6 +47,9 @@ ENDING_VIDEO_CANDIDATES = [
 
 OPENING_CLIP_MARKER = "01_EBI_CHAN_OP"
 
+# 同じv3 JSONを出す --export の名前。新しい版から順に試す。
+EXPORT_FORMATS = ("v3", "json")
+
 
 def first_existing_path(candidates):
     """候補のうち実在する最初のパスを返す"""
@@ -74,28 +77,49 @@ def find_opening_end_frame(timeline) -> int:
 
 
 def run_auto_editor_cut_list(camera_path, output_path):
-    """auto-editorを実行し、カットリスト（v3 JSON）を得る"""
-    command = [
-        "auto-editor",
-        str(camera_path),
-        "--margin", dual_source.SILENCE_MARGIN,
-        "--edit", dual_source.SILENCE_EDIT,
-        "--export", "json",
-        "--output", str(output_path),
-        "--no-open",
-    ]
-    print(f"実行コマンド: {' '.join(command)}")
-    try:
-        subprocess.run(command, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError as error:
-        print(f"✗ auto-editor実行失敗: {error}")
-        print(f"エラー出力: {error.stderr}")
-        return None
-    except FileNotFoundError:
-        print("✗ auto-editorが見つかりません")
-        return None
+    """auto-editorを実行し、カットリスト（v3 JSON）を得る
 
-    return json.loads(Path(output_path).read_text(encoding="utf-8"))
+    同じv3 JSONを出す指定の名前がバージョンで変わっている。新しい版は "v3"、
+    古い版は "json" しか受け付けないので、順に試す。
+    """
+    for export_format in EXPORT_FORMATS:
+        command = [
+            "auto-editor",
+            str(camera_path),
+            "--margin", dual_source.SILENCE_MARGIN,
+            "--edit", dual_source.SILENCE_EDIT,
+            "--export", export_format,
+            "--output", str(output_path),
+            "--no-open",
+        ]
+        print(f"実行コマンド: {' '.join(command)}")
+        try:
+            subprocess.run(command, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as error:
+            stderr = error.stderr or ""
+            if "Invalid export format" in stderr or "Export must be" in stderr:
+                print(f"  この版のauto-editorは --export {export_format} を知りません")
+                continue
+            print(f"✗ auto-editor実行失敗: {error}")
+            print(f"エラー出力: {stderr}")
+            return None
+        except FileNotFoundError:
+            print("✗ auto-editorが見つかりません")
+            return None
+
+        return json.loads(Path(output_path).read_text(encoding="utf-8"))
+
+    print(f"✗ auto-editorが {' / '.join(EXPORT_FORMATS)} のどれも受け付けませんでした")
+    return None
+
+
+def clip_frame_rate(media_pool_item, fallback):
+    """素材のフレームレートを読む（読めなければfallback）"""
+    try:
+        frame_rate = float(media_pool_item.GetClipProperty("FPS"))
+    except (TypeError, ValueError, AttributeError):
+        return fallback
+    return frame_rate if frame_rate > 0 else fallback
 
 
 def append_clips_with_retry(media_pool, clip_infos, max_retries=3, delay=2):
@@ -189,10 +213,9 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
     except audio_sync.AudioSyncError as error:
         print(f"✗ 音声同期に失敗: {error}")
         return False
-    offset_frames = dual_source.seconds_to_frames(sync.offset_seconds, frame_rate)
     print(
-        f"✓ 音声同期: 画面録画の先頭はカメラの {sync.offset_seconds:.3f} 秒"
-        f"（{offset_frames}フレーム）地点（確度 {sync.confidence:.2f}）"
+        f"✓ 音声同期: 画面録画の先頭はカメラの {sync.offset_seconds:.3f} 秒地点"
+        f"（確度 {sync.confidence:.2f}）"
     )
 
     document = run_auto_editor_cut_list(pair.camera, pair.folder / CUT_LIST_NAME)
@@ -206,12 +229,6 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
         print(f"✗ カットリストを読めません: {error}")
         return False
 
-    if round(cut_frame_rate, 3) != round(frame_rate, 3):
-        print(
-            f"✗ カットリスト({cut_frame_rate}fps)とタイムライン({frame_rate}fps)の"
-            "フレームレートが違います"
-        )
-        return False
     print(f"✓ 無音カット後のセグメント数: {len(segments)}")
 
     imported = media_pool.ImportMedia([str(pair.slides), str(pair.camera)])
@@ -230,17 +247,31 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
     except (TypeError, ValueError):
         slides_frame_count = None
 
+    # タイムラインと素材のfpsは一致しない前提で、秒に直してから配置する
+    rates = dual_source.FrameRates(
+        timeline=frame_rate,
+        slides=clip_frame_rate(slides_item, frame_rate),
+        camera=clip_frame_rate(camera_item, cut_frame_rate),
+        cut_list=cut_frame_rate,
+    )
+    print(
+        f"✓ フレームレート: タイムライン {rates.timeline} / 画面録画 {rates.slides} / "
+        f"カメラ {rates.camera} / カットリスト {rates.cut_list}"
+    )
+
     try:
-        placements = dual_source.build_placements(
+        plan = dual_source.build_placements(
             segments,
-            slides_offset_frames=offset_frames,
+            rates=rates,
+            slides_offset_seconds=sync.offset_seconds,
             timeline_start_frame=start_frame,
             slides_frame_count=slides_frame_count,
         )
     except dual_source.DualSourceError as error:
         print(f"✗ タイムラインを組み立てられません: {error}")
         return False
-    print(f"✓ 配置計画: {dual_source.describe_plan(placements, len(segments))}")
+    print(f"✓ 配置計画: {plan.describe()}")
+    placements = plan.placements
 
     if not ensure_video_tracks(timeline, dual_source.CAMERA_TRACK):
         return False
@@ -269,7 +300,7 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
     apply_clip_properties(slide_items, dual_source.SLIDES_PROPERTIES, "画面録画")
     apply_clip_properties(camera_items, dual_source.CAMERA_PROPERTIES, "カメラ")
 
-    append_ending_video(media_pool, dual_source.placement_end_frame(placements))
+    append_ending_video(media_pool, plan.end_frame)
     return True
 
 

@@ -24,11 +24,15 @@ def load(name: str):
     return module
 
 
+sys.path.insert(0, str(SCRIPT_DIR))
 AUDIO_SYNC = load("audio_sync")
 DUAL_SOURCE = load("dual_source")
+EDITOR = load("dual_source_video_editor")
 
 SAMPLE_RATE = 8000
 FRAME_RATE = 30
+# The real template timeline runs faster than the recordings do.
+TIMELINE_FRAME_RATE = 60
 SLIDE_OFFSET_SECONDS = 2.0
 
 pytestmark = pytest.mark.skipif(
@@ -90,27 +94,28 @@ def test_the_folder_is_recognized_and_the_two_tracks_stay_in_sync(recording_fold
     assert sync.offset_seconds == pytest.approx(SLIDE_OFFSET_SECONDS, abs=0.25)
     offset_frames = DUAL_SOURCE.seconds_to_frames(sync.offset_seconds, FRAME_RATE)
 
+    # Going through the editor's own call exercises the --export name fallback
+    # against whichever auto-editor version is actually installed.
     cut_list_path = recording_folder / "cuts.json"
-    subprocess.run(
-        [
-            "auto-editor", str(pair.camera),
-            "--margin", "0.2sec",
-            "--edit", "audio:threshold=3%",
-            "--export", "json",
-            "--output", str(cut_list_path),
-            "--no-open",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    document = EDITOR.run_auto_editor_cut_list(pair.camera, cut_list_path)
+    assert document is not None, "auto-editor produced no cut list"
 
-    segments = DUAL_SOURCE.parse_cut_list(cut_list_path)
+    segments = DUAL_SOURCE.parse_cut_list(document)
     assert len(segments) > 1, "the fake talk should be cut into several segments"
 
-    placements = DUAL_SOURCE.build_placements(
-        segments, slides_offset_frames=offset_frames, timeline_start_frame=300
+    plan = DUAL_SOURCE.build_placements(
+        segments,
+        rates=DUAL_SOURCE.FrameRates(
+            timeline=TIMELINE_FRAME_RATE,
+            slides=FRAME_RATE,
+            camera=FRAME_RATE,
+            cut_list=FRAME_RATE,
+        ),
+        slides_offset_seconds=sync.offset_seconds,
+        timeline_start_frame=300,
     )
 
+    placements = plan.placements
     slides = [p for p in placements if p.role == "slides"]
     camera = [p for p in placements if p.role == "camera"]
     # Same timeline position and same length on both tracks means no drift.
@@ -122,4 +127,6 @@ def test_the_folder_is_recognized_and_the_two_tracks_stay_in_sync(recording_fold
     assert all(
         c.start_frame - s.start_frame == offset_frames for s, c in zip(slides, camera)
     )
+    # Record frames count the faster timeline, source frames the slower camera.
+    assert plan.end_frame > sum(p.end_frame - p.start_frame for p in camera)
     assert all(p.start_frame >= 0 for p in placements)

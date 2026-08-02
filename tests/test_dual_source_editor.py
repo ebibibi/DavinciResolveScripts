@@ -42,15 +42,15 @@ class FakeItem:
 
 
 class FakeMediaPoolItem:
-    def __init__(self, name: str, frames: int):
+    def __init__(self, name: str, frames: int, frame_rate: float = FRAME_RATE):
         self._name = name
-        self._frames = frames
+        self._properties = {"Frames": str(frames), "FPS": str(frame_rate)}
 
     def GetName(self) -> str:
         return self._name
 
     def GetClipProperty(self, key: str) -> str:
-        return str(self._frames)
+        return self._properties[key]
 
 
 class FakeTimeline:
@@ -58,12 +58,13 @@ class FakeTimeline:
         self._items = items
         self.video_tracks = video_tracks
         self.timecode = None
+        self.frame_rate = FRAME_RATE
 
     def GetItemsInTrack(self, track_type: str, index: int) -> dict:
         return {i: item for i, item in enumerate(self._items)}
 
     def GetSetting(self, key: str) -> str:
-        return str(FRAME_RATE)
+        return str(self.frame_rate)
 
     def GetTrackCount(self, track_type: str) -> int:
         return self.video_tracks
@@ -78,15 +79,22 @@ class FakeTimeline:
 
 
 class FakeMediaPool:
-    def __init__(self, frames_by_name: dict):
+    def __init__(self, frames_by_name: dict, frame_rates: dict | None = None):
         self.frames_by_name = frames_by_name
+        self.frame_rates = frame_rates or {}
         self.appended: list[list[dict]] = []
 
     def ImportMedia(self, paths):
         items = []
         for path in paths:
             name = Path(path).name
-            items.append(FakeMediaPoolItem(name, self.frames_by_name.get(name, 100000)))
+            items.append(
+                FakeMediaPoolItem(
+                    name,
+                    self.frames_by_name.get(name, 100000),
+                    self.frame_rates.get(name, FRAME_RATE),
+                )
+            )
         return items
 
     def AppendToTimeline(self, clip_infos):
@@ -186,20 +194,21 @@ def test_the_audio_comes_from_the_camera_file_only(pair, stub_pipeline):
     assert {c["mediaPoolItem"].GetName() for c in audio} == {"camera.mp4"}
 
 
-def test_a_frame_rate_mismatch_stops_the_run(pair, stub_pipeline, monkeypatch):
-    monkeypatch.setattr(
-        EDITOR,
-        "run_auto_editor_cut_list",
-        lambda camera, out: {
-            "version": "3",
-            "timebase": "60/1",
-            "v": [[{"start": 0, "dur": 300, "offset": 0}]],
-        },
+def test_a_faster_timeline_still_places_the_recordings(pair, stub_pipeline):
+    """A 60 fps timeline with 30 fps recordings is the real setup, not an error."""
+    media_pool = FakeMediaPool(
+        {"PPT.mkv": 100000, "camera.mp4": 100000},
+        frame_rates={"PPT.mkv": 30.0, "camera.mp4": 30.0},
     )
-    media_pool = FakeMediaPool({})
+    timeline = FakeTimeline([], video_tracks=1)
+    timeline.frame_rate = 60.0
 
-    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, FakeTimeline([]), pair, 0) is False
-    assert media_pool.appended == []
+    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, timeline, pair, 0)
+
+    camera = [c for c in media_pool.appended[0] if c["trackIndex"] == 2]
+    # The cut list counts 30 fps source frames; the timeline advances at 60.
+    assert camera[0]["startFrame"] == 90
+    assert [c["recordFrame"] for c in camera] == [0, 600]
 
 
 def test_a_failed_sync_stops_the_run_instead_of_guessing(pair, stub_pipeline, monkeypatch):
@@ -286,3 +295,44 @@ def test_a_missing_recording_dir_is_reported(capsys, monkeypatch):
     assert EDITOR.main([]) == 1
 
     assert "OBS録画フォルダが見つかりません" in capsys.readouterr().out
+
+
+def test_a_newer_auto_editor_export_name_is_tried_first(pair, monkeypatch):
+    """Newer versions know "v3", older ones only "json"; both write the same file."""
+    attempts = []
+
+    def fake_run(command, capture_output, text, check):
+        attempts.append(command[command.index("--export") + 1])
+        if attempts[-1] != "json":
+            raise EDITOR.subprocess.CalledProcessError(
+                1, command, stderr='Error! Invalid export format: "v3"'
+            )
+        Path(command[command.index("--output") + 1]).write_text(
+            json.dumps({"version": "3", "timebase": "60/1", "v": [[]]}), encoding="utf-8"
+        )
+
+        class Result:
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    document = EDITOR.run_auto_editor_cut_list(pair.camera, pair.folder / "cuts.json")
+
+    assert attempts == ["v3", "json"]
+    assert document["timebase"] == "60/1"
+
+
+def test_a_real_auto_editor_failure_is_not_retried_as_a_version_problem(pair, monkeypatch):
+    attempts = []
+
+    def fake_run(command, capture_output, text, check):
+        attempts.append(command)
+        raise EDITOR.subprocess.CalledProcessError(1, command, stderr="Error! No such file")
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    assert EDITOR.run_auto_editor_cut_list(pair.camera, pair.folder / "cuts.json") is None
+    assert len(attempts) == 1
