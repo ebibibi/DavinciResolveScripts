@@ -1,6 +1,6 @@
 {
   "auto_editor": {
-    "threshold_percent": 1,
+    "threshold_percent": 3,
     "margin_seconds": 0.3
   },
   "working_dirs": [

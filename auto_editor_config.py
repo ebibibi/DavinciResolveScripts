@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+# Measured on the AZ-900 recordings: at 1% the camera microphone's room tone
+# never falls below the threshold and 99.7% of the talk survives. See ADR-013.
+DEFAULT_THRESHOLD_PERCENT = 3.0
+DEFAULT_MARGIN_SECONDS = 0.3
+
 DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parent / "有償版用スクリプト" / "config.json"
 )
@@ -38,10 +43,15 @@ def _compact_number(value: float) -> str:
 
 @dataclass(frozen=True)
 class AutoEditorConfig:
-    """Validated values formatted for the auto-editor CLI."""
+    """Validated values formatted for the auto-editor CLI.
 
-    threshold_percent: float = 1.0
-    margin_seconds: float = 0.3
+    The shipped threshold is 3%, measured against both microphones: the camera
+    microphone that the dual source route analyses never falls below 1%, so that
+    default cut nothing at all on the route that needs it most. See ADR-013.
+    """
+
+    threshold_percent: float = DEFAULT_THRESHOLD_PERCENT
+    margin_seconds: float = DEFAULT_MARGIN_SECONDS
 
     @property
     def edit_expression(self) -> str:
@@ -61,14 +71,14 @@ def parse_auto_editor_config(data: Mapping[str, Any]) -> AutoEditorConfig:
         threshold_percent=_number(
             section,
             "threshold_percent",
-            1.0,
+            DEFAULT_THRESHOLD_PERCENT,
             minimum=0.000001,
             maximum=100.0,
         ),
         margin_seconds=_number(
             section,
             "margin_seconds",
-            0.3,
+            DEFAULT_MARGIN_SECONDS,
             minimum=0.0,
         ),
     )
