@@ -22,6 +22,11 @@ from pathlib import Path
 SLIDE_SUFFIX = ".mkv"
 CAMERA_SUFFIX = ".mp4"
 
+# The silence cut is tuned to one voice, not to one route, so both editors use
+# the same numbers. A test pins them together to stop them drifting apart again.
+SILENCE_MARGIN = "0.3sec"
+SILENCE_EDIT = "audio:threshold=1%"
+
 SLIDES_TRACK = 1
 CAMERA_TRACK = 2
 CAMERA_AUDIO_TRACK = 1

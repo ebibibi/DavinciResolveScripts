@@ -29,7 +29,7 @@ stable single source editor is untouched. See
    the slide file, plus the correlation coefficient at that point. A weak match
    stops the run instead of silently assuming zero.
 3. **Find the silence.** Run `auto-editor` once, on the camera file that carries
-   the microphone, with the proven `audio:threshold=3%` and `--margin 0.2sec`,
+   the microphone, with the proven `audio:threshold=1%` and `--margin 0.3sec`,
    and `--export json`. That prints a v3 timeline describing every surviving
    segment as `{start, dur, offset}` in timeline frames — a machine readable cut
    list rather than a finished timeline.

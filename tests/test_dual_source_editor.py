@@ -258,8 +258,8 @@ def test_the_cut_list_is_written_next_to_the_recording(pair, tmp_path, monkeypat
 
     assert document["version"] == "3"
     assert output.exists()
-    assert "--margin" in recorded["command"] and "0.2sec" in recorded["command"]
-    assert "audio:threshold=3%" in recorded["command"]
+    assert EDITOR.dual_source.SILENCE_MARGIN in recorded["command"]
+    assert EDITOR.dual_source.SILENCE_EDIT in recorded["command"]
 
 
 def test_the_entry_point_refuses_a_folder_that_is_not_a_pair(tmp_path, capsys):

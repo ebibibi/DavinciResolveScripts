@@ -3,14 +3,14 @@ type: adr
 id: ADR-008
 title: Tune silence detection to 3 percent with 0.2-second margins
 decision: Use audio:threshold=3% and --margin 0.2sec for silence removal in both stable and advanced workflows.
-status: accepted
+status: superseded
 date: 2026-07-21
 deciders: [Masahiko Ebisu, Codex]
 tags: [auto-editor, silence-removal, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes:
-superseded_by:
+superseded_by: ADR-010
 ---
 
 # Tune silence detection to 3 percent with 0.2-second margins
