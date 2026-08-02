@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -151,3 +152,64 @@ def test_estimate_offset_across_the_obs_container_pair(tmp_path):
     # which is invisible once only one of the two audio tracks is used.
     assert result.offset_seconds == pytest.approx(shift_seconds, abs=0.25)
     assert result.confidence > AUDIO_SYNC.DEFAULT_MINIMUM_CONFIDENCE
+
+
+def test_a_file_without_audio_is_reported_clearly(tmp_path):
+    silent_video = tmp_path / "noaudio.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y",
+            "-f", "lavfi", "-i", "color=c=black:s=64x64:r=30:d=1",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(silent_video),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    # ffmpeg refuses to write an empty stream, so the failure surfaces as a
+    # decode error naming the file rather than as an empty result.
+    with pytest.raises(AUDIO_SYNC.AudioSyncError, match="noaudio.mp4"):
+        AUDIO_SYNC.read_mono_audio(silent_video)
+
+
+def test_a_missing_ffmpeg_is_reported_clearly(tmp_path):
+    present = write_media(tmp_path / "a.wav", speech_like_samples(1.0), codec="pcm_s16le")
+
+    with pytest.raises(AUDIO_SYNC.AudioSyncError, match="ffmpeg was not found"):
+        AUDIO_SYNC.read_mono_audio(present, ffmpeg="ffmpeg-that-does-not-exist")
+
+
+def test_an_impossible_envelope_rate_is_refused():
+    with pytest.raises(AUDIO_SYNC.AudioSyncError, match="must be positive"):
+        AUDIO_SYNC.loudness_envelope(np.zeros(100), SAMPLE_RATE, envelope_rate=0)
+
+
+def test_a_clip_shorter_than_one_envelope_step_is_refused():
+    with pytest.raises(AUDIO_SYNC.AudioSyncError, match="shorter than one envelope step"):
+        AUDIO_SYNC.loudness_envelope(np.zeros(3), SAMPLE_RATE, ENVELOPE_RATE)
+
+
+def test_the_command_line_prints_the_offset_in_frames(tmp_path, capsys, monkeypatch):
+    slides = write_media(tmp_path / "slides.wav", speech_like_samples(30.0), codec="pcm_s16le")
+    head = np.zeros(int(1.5 * SAMPLE_RATE))
+    camera = write_media(
+        tmp_path / "camera.wav",
+        np.concatenate((head, speech_like_samples(30.0))),
+        codec="pcm_s16le",
+    )
+    monkeypatch.setattr(sys, "argv", ["audio_sync.py", str(slides), str(camera)])
+
+    assert AUDIO_SYNC.main() == 0
+
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["offset_frames"] == 45
+
+
+def test_the_command_line_reports_a_failure_without_a_traceback(tmp_path, capsys, monkeypatch):
+    first = write_media(tmp_path / "one.wav", speech_like_samples(30.0, seed=1), codec="pcm_s16le")
+    second = write_media(tmp_path / "two.wav", speech_like_samples(30.0, seed=2), codec="pcm_s16le")
+    monkeypatch.setattr(sys, "argv", ["audio_sync.py", str(first), str(second)])
+
+    assert AUDIO_SYNC.main() == 1
+
+    assert "error" in json.loads(capsys.readouterr().out)

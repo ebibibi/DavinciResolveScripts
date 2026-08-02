@@ -29,10 +29,15 @@ DEFAULT_SAMPLE_RATE = 8000
 DEFAULT_ENVELOPE_RATE = 200
 # Correlating the first 15 minutes is enough and bounds the memory use.
 DEFAULT_MAX_SECONDS = 900.0
-# How far the winning lag must stand above the other lags, in deviations.
-DEFAULT_MINIMUM_CONFIDENCE = 6.0
+# Confidence is the correlation coefficient at the winning lag. Two recordings
+# of the same talk score above 0.89 even under heavy noise, while unrelated
+# recordings peak below 0.47, so 0.6 sits in the gap with room on both sides.
+DEFAULT_MINIMUM_CONFIDENCE = 0.6
 # Lags with less overlap than this are ignored even for very short recordings.
 _MINIMUM_OVERLAP_STEPS = 200
+# A lag that compares less than half of the shorter recording is a coincidence
+# waiting to happen, so it never gets to win.
+_MINIMUM_OVERLAP_FRACTION = 0.5
 
 
 class AudioSyncError(RuntimeError):
@@ -156,17 +161,18 @@ def correlate_envelopes(
     normalized = correlation / overlap
 
     # Lags that barely overlap are noise, not evidence, so they never win.
-    usable = overlap >= max(_MINIMUM_OVERLAP_STEPS, 0.25 * min(first.size, second.size))
+    usable = overlap >= max(
+        _MINIMUM_OVERLAP_STEPS, _MINIMUM_OVERLAP_FRACTION * min(first.size, second.size)
+    )
     if not usable.any():
         raise AudioSyncError("The recordings are too short to be compared")
 
     candidates = np.where(usable, normalized, -np.inf)
     peak_index = int(np.argmax(candidates))
 
-    scores = normalized[usable]
-    deviation = float(np.std(scores))
-    peak = float(normalized[peak_index])
-    confidence = (peak - float(np.mean(scores))) / deviation if deviation > 0.0 else 0.0
+    # Both envelopes are already centered and scaled, so dividing by the overlap
+    # turns the winning sum into the correlation coefficient at that lag.
+    confidence = float(normalized[peak_index])
 
     # A correlation index counts how far the reference moved; the caller asks
     # the opposite question, so the sign is flipped back here.

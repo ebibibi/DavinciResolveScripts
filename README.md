@@ -29,6 +29,27 @@ DaVinci Resolve process:
 
 Use this route when the instruction is effectively “do nothing extra.”
 
+### Slides and camera in one folder
+
+When the newest subfolder of the recording folder holds exactly one `.mkv` and
+one `.mp4`, the same launcher builds a two source timeline instead: the
+PowerPoint capture on V1, the green screen camera on V2, the camera microphone
+as the only audio. The two files are aligned by correlating their audio, one
+silence cut list drives both tracks so they cannot drift, and the measured
+camera placement is applied to every clip.
+
+Any other folder shape edits exactly as it did before. Smooth Cut and the green
+screen key remain manual, because the Resolve scripting API cannot add
+transitions or Edit page effects. See
+[docs/dual-source-editing-plan.md](docs/dual-source-editing-plan.md) and
+[ADR-009](docs/adr/009-detect-the-dual-source-shape-inside-the-stable-route.md).
+
+The measured offset can also be checked on its own:
+
+```powershell
+python "有償版用スクリプト/audio_sync.py" slides.mkv camera.mp4
+```
+
 ## Advanced workflow
 
 1. Find the newest OBS recording.
@@ -72,6 +93,7 @@ report entirely when another script only needs the final path from stdout.
 ## Requirements
 
 - Python 3.10 or later
+- NumPy (installed with auto-editor)
 - [auto-editor](https://auto-editor.com/)
 - FFmpeg and ffprobe with libass support
 - Whisper CLI for automatic transcription
