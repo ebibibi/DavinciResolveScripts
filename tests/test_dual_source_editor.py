@@ -391,3 +391,50 @@ def test_a_stale_cut_list_from_a_previous_run_is_not_read(pair, monkeypatch):
         pair.camera, pair.folder / "_auto_editor_cuts.json"
     ) is None
     assert not stale.exists()
+
+
+def test_a_cut_list_written_in_the_windows_code_page_is_still_read(pair, monkeypatch):
+    """auto-editor on Windows writes the input path in CP932, not UTF-8."""
+    document = {
+        "version": "3",
+        "timebase": "60/1",
+        "v": [[{"start": 0, "dur": 300, "offset": 90, "src": "C:\\Youtube動画作成場所\\C2059.MP4"}]],
+    }
+
+    def fake_run(command, capture_output, text, check):
+        requested = Path(command[command.index("--output") + 1])
+        requested.write_bytes(json.dumps(document, ensure_ascii=False).encode("cp932"))
+
+        class Result:
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    read = EDITOR.run_auto_editor_cut_list(pair.camera, pair.folder / "_auto_editor_cuts.json")
+
+    assert read["timebase"] == "60/1"
+    assert read["v"][0][0]["offset"] == 90
+
+
+def test_a_cut_list_in_neither_encoding_still_yields_its_numbers(pair, monkeypatch):
+    """Undecodable bytes in a path must not stop a run that only needs numbers."""
+
+    def fake_run(command, capture_output, text, check):
+        requested = Path(command[command.index("--output") + 1])
+        broken = b'{"version": "3", "timebase": "60/1", "src": "\xff\xfe", "v": [[]]}'
+        requested.write_bytes(broken)
+
+        class Result:
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    read = EDITOR.run_auto_editor_cut_list(pair.camera, pair.folder / "_auto_editor_cuts.json")
+
+    assert read["timebase"] == "60/1"

@@ -34,9 +34,12 @@ stable single source editor is untouched. See
    `json` on older ones, so both are tried in that order. Current auto-editor
    also rewrites the `--output` extension to `.v3` regardless of what was asked
    for, so the file that was actually written is looked up rather than assumed,
-   and any leftover from a previous run is deleted first. The result describes
-   every surviving segment as `{start, dur, offset}` — a machine readable cut
-   list rather than a finished timeline.
+   and any leftover from a previous run is deleted first. On Windows the input
+   path inside that JSON is written in the active code page rather than UTF-8,
+   so the file is decoded leniently — only the numbers matter, and a path that
+   cannot be decoded must not stop the run. The result describes every surviving
+   segment as `{start, dur, offset}` — a machine readable cut list rather than a
+   finished timeline.
 4. **Build both tracks.** Each surviving segment becomes three
    `AppendToTimeline` entries sharing one record frame: the slide clip on V1,
    the camera clip on V2, and the camera audio on A1. Because both tracks are
