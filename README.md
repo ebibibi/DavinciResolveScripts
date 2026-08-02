@@ -40,11 +40,14 @@ lecture recorded as two files in one folder, for example `!OBS録画/az900-3/`:
 1. Take the newest subfolder holding exactly one `.mkv` and one `.mp4`.
 2. Align the two files by correlating their audio, and stop if they do not match.
 3. Run `auto-editor` once, on the camera file that carries the microphone, and
-   read the surviving segments from its JSON cut list.
+   read the surviving segments from its JSON cut list. The export is called `v3`
+   on current auto-editor and `json` on older ones; both are tried.
 4. Place every segment three times at the same timeline frame: the slide capture
    on V1, the camera on V2, and the camera audio on A1. The slide audio is not
    used.
 5. Apply the camera and slide placement measured from the AZ-900 project.
+   The timeline, the two recordings and the cut list may all run at different
+   frame rates, so the plan is computed in seconds and converted per track.
 6. Append the template's ending clip after the last segment.
 
 The folder can also be given explicitly:

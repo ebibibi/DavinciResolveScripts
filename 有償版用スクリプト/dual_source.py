@@ -37,7 +37,7 @@ AUDIO_ONLY = 2
 # The camera is usually started first, so the talk can begin a moment before the
 # slide capture exists. Up to five seconds of that head is trimmed; more than
 # that means the two files are not the same session.
-MAXIMUM_HEAD_TRIM_FRAMES = 150
+MAXIMUM_HEAD_TRIM_SECONDS = 5.0
 
 # Measured from the manually edited AZ-900 project, where the timeline is
 # 1920x1080. The slide capture is shrunk and moved left, which frees the right
@@ -180,92 +180,134 @@ def seconds_to_frames(seconds: float, frame_rate: float) -> int:
     return int(round(seconds * frame_rate))
 
 
+@dataclass(frozen=True)
+class FrameRates:
+    """Every frame rate involved, which are not required to agree.
+
+    The timeline is whatever the template was built at, the two recordings are
+    whatever the camera and OBS produced, and the cut list counts frames at
+    auto-editor's own timebase. Mixing them by frame number silently shifts the
+    edit, so the plan is computed in seconds and converted once per track.
+    """
+
+    timeline: float
+    slides: float
+    camera: float
+    cut_list: float
+
+    def __post_init__(self) -> None:
+        for name in ("timeline", "slides", "camera", "cut_list"):
+            if getattr(self, name) <= 0:
+                raise DualSourceError(f"Frame rate '{name}' must be positive")
+
+
+@dataclass(frozen=True)
+class TimelinePlan:
+    """Everything the Resolve side needs to place and to report."""
+
+    placements: tuple[ClipPlacement, ...]
+    end_frame: int
+    segments_placed: int
+    segments_total: int
+    head_trim_seconds: float
+
+    def describe(self) -> str:
+        """Summarize the plan in one line, so a run can be checked at a glance."""
+        parts = [f"{self.segments_placed} segments on V1 and V2"]
+        dropped = self.segments_total - self.segments_placed
+        if dropped:
+            parts.append(f"{dropped} outside the slide capture and not placed")
+        if self.head_trim_seconds > 0:
+            parts.append(f"{self.head_trim_seconds:.2f}s trimmed off the head")
+        return ", ".join(parts)
+
+
 def build_placements(
     segments: tuple[Segment, ...],
-    slides_offset_frames: int,
+    rates: FrameRates,
+    slides_offset_seconds: float,
     timeline_start_frame: int = 0,
     slides_frame_count: int | None = None,
-    maximum_head_trim: int = MAXIMUM_HEAD_TRIM_FRAMES,
-) -> tuple[ClipPlacement, ...]:
+    maximum_head_trim: float = MAXIMUM_HEAD_TRIM_SECONDS,
+) -> TimelinePlan:
     """Lay every segment onto the slide track, the camera track and the audio track.
 
-    `slides_offset_frames` is how far into the camera recording the slide
-    recording begins, so subtracting it converts a camera source frame into the
-    slide source frame that was captured at the same moment.
+    `slides_offset_seconds` is how far into the camera recording the slide
+    recording begins, so subtracting it converts a moment of the camera into the
+    moment of the slide capture that was recorded at the same time.
 
-    The camera usually starts rolling first, so the opening moments of the talk
-    can exist on the camera and not on the slides. Those few frames are trimmed
-    off the front of both tracks rather than placed, which keeps the two views
-    aligned. Record frames are accumulated from the surviving durations, so a
-    trim shifts what follows instead of leaving a hole.
+    The camera usually starts rolling first, so the opening of the talk can exist
+    on the camera and not on the slides. That head is trimmed off both tracks by
+    the same amount rather than placed. Record frames are accumulated from the
+    surviving durations, so a trim shifts what follows instead of leaving a hole.
     """
     if not segments:
         raise DualSourceError("There is nothing to place on the timeline")
 
-    head_shortfall = slides_offset_frames - segments[0].source_frame
+    first_camera_second = segments[0].source_frame / rates.cut_list
+    head_shortfall = slides_offset_seconds - first_camera_second
     if head_shortfall > maximum_head_trim:
         raise DualSourceError(
             "The slide recording starts too late: it is missing the first "
-            f"{head_shortfall} frames of the talk. Check that both files belong "
-            "to the same session."
+            f"{head_shortfall:.1f} seconds of the talk. Check that both files "
+            "belong to the same session."
         )
+
+    slides_limit = (
+        slides_frame_count / rates.slides if slides_frame_count is not None else None
+    )
 
     placements: list[ClipPlacement] = []
     record_frame = timeline_start_frame
+    placed = 0
+    trimmed = 0.0
     for segment in segments:
-        slide_start = segment.source_frame - slides_offset_frames
-        camera_start = segment.source_frame
-        duration = segment.duration
-        if slide_start < 0:
-            # Trim the part of the talk the slide capture never saw, off both
-            # tracks by the same amount.
-            duration += slide_start
-            camera_start -= slide_start
-            slide_start = 0
-            if duration <= 0:
+        camera_second = segment.source_frame / rates.cut_list
+        duration_seconds = segment.duration / rates.cut_list
+        slide_second = camera_second - slides_offset_seconds
+        if slide_second < 0:
+            # Skip the part of the talk the slide capture never saw, on both
+            # tracks, so the two views stay aligned.
+            trimmed += min(-slide_second, duration_seconds)
+            duration_seconds += slide_second
+            camera_second -= slide_second
+            slide_second = 0.0
+            if duration_seconds <= 0:
                 continue
 
-        if slides_frame_count is not None and slide_start + duration > slides_frame_count:
+        if slides_limit is not None and slide_second + duration_seconds > slides_limit:
             # The slide capture was stopped first. Placing a clip past its end
             # makes Resolve reject the whole batch, so the tail is dropped here
-            # and reported by the caller instead.
+            # and reported instead.
             break
 
-        for role, start, track, media_type in (
-            ("slides", slide_start, SLIDES_TRACK, VIDEO_ONLY),
-            ("camera", camera_start, CAMERA_TRACK, VIDEO_ONLY),
-            ("camera_audio", camera_start, CAMERA_AUDIO_TRACK, AUDIO_ONLY),
+        for role, source_second, rate, track, media_type in (
+            ("slides", slide_second, rates.slides, SLIDES_TRACK, VIDEO_ONLY),
+            ("camera", camera_second, rates.camera, CAMERA_TRACK, VIDEO_ONLY),
+            ("camera_audio", camera_second, rates.camera, CAMERA_AUDIO_TRACK, AUDIO_ONLY),
         ):
+            start_frame = seconds_to_frames(source_second, rate)
             placements.append(
                 ClipPlacement(
                     role=role,
-                    start_frame=start,
-                    end_frame=start + duration,
+                    start_frame=start_frame,
+                    end_frame=start_frame + seconds_to_frames(duration_seconds, rate),
                     record_frame=record_frame,
                     media_type=media_type,
                     track_index=track,
                 )
             )
-        record_frame += duration
+        record_frame += seconds_to_frames(duration_seconds, rates.timeline)
+        placed += 1
 
     if not placements:
         raise DualSourceError(
             "The slide recording is shorter than the first segment of the talk"
         )
-    return tuple(placements)
-
-
-def placement_end_frame(placements: tuple[ClipPlacement, ...]) -> int:
-    """Return the first timeline frame after everything that was placed."""
-    return max(
-        placement.record_frame + placement.end_frame - placement.start_frame
-        for placement in placements
+    return TimelinePlan(
+        placements=tuple(placements),
+        end_frame=record_frame,
+        segments_placed=placed,
+        segments_total=len(segments),
+        head_trim_seconds=trimmed,
     )
-
-
-def describe_plan(placements: tuple[ClipPlacement, ...], segments_planned: int) -> str:
-    """Summarize the plan in one line, so a run can be checked at a glance."""
-    placed = len([p for p in placements if p.role == "slides"])
-    dropped = segments_planned - placed
-    tail = f", {dropped} outside the slide capture and not placed" if dropped else ""
-    return f"{placed} segments on V1 and V2{tail}"

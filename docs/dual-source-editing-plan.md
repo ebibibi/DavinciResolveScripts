@@ -29,9 +29,10 @@ stable single source editor is untouched. See
    the slide file, plus the correlation coefficient at that point. A weak match
    stops the run instead of silently assuming zero.
 3. **Find the silence.** Run `auto-editor` once, on the camera file that carries
-   the microphone, with the proven `audio:threshold=1%` and `--margin 0.3sec`,
-   and `--export json`. That prints a v3 timeline describing every surviving
-   segment as `{start, dur, offset}` in timeline frames — a machine readable cut
+   the microphone, with the proven `audio:threshold=1%` and `--margin 0.3sec`.
+   The export that prints a v3 timeline is named `v3` on current versions and
+   `json` on older ones, so both are tried in that order. The result describes
+   every surviving segment as `{start, dur, offset}` — a machine readable cut
    list rather than a finished timeline.
 4. **Build both tracks.** Each surviving segment becomes three
    `AppendToTimeline` entries sharing one record frame: the slide clip on V1,
@@ -43,6 +44,24 @@ stable single source editor is untouched. See
    every clip on both tracks.
 6. **Wrap it.** The template's opening clip decides where the body starts, and
    the ending clip is appended after the last segment.
+
+## Four frame rates, none of which have to agree
+
+The template timeline runs at 60 fps while the recordings usually do not, and
+auto-editor counts the cut list in its own timebase. Frame numbers therefore
+mean different things depending on which of the four they belong to:
+
+| Rate | What it counts |
+|---|---|
+| Timeline | `recordFrame` — where a clip sits on the timeline |
+| Slide capture | `startFrame` / `endFrame` of every V1 clip |
+| Camera | `startFrame` / `endFrame` of every V2 and A1 clip |
+| Cut list | the `{start, dur, offset}` auto-editor reported |
+
+The plan is therefore computed in seconds and converted once per track, using
+the frame rate Resolve reports for that clip. Mixing them by frame number would
+shift the edit silently, which is exactly the kind of error that only shows up
+after the render.
 
 ## Measured placement
 
