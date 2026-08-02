@@ -78,8 +78,8 @@ def run_auto_editor_cut_list(camera_path, output_path):
     command = [
         "auto-editor",
         str(camera_path),
-        "--margin", "0.2sec",
-        "--edit", "audio:threshold=3%",
+        "--margin", dual_source.SILENCE_MARGIN,
+        "--edit", dual_source.SILENCE_EDIT,
         "--export", "json",
         "--output", str(output_path),
         "--no-open",

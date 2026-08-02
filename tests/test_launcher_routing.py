@@ -29,9 +29,19 @@ def test_advanced_launcher_routes_only_to_highlight_editor() -> None:
 def test_stable_editor_uses_current_silence_cut_settings() -> None:
     content = (SCRIPT_DIR / "auto_video_editor.py").read_text(encoding="utf-8")
 
-    assert '"--margin", "0.2sec"' in content
-    assert '"--edit", "audio:threshold=3%"' in content
-    assert "threshold=1%" not in content
+    assert '"--margin", "0.3sec"' in content
+    assert '"--edit", "audio:threshold=1%"' in content
+    assert "threshold=3%" not in content
+
+
+def test_both_routes_cut_silence_with_the_same_settings() -> None:
+    stable = (SCRIPT_DIR / "auto_video_editor.py").read_text(encoding="utf-8")
+    shared = (SCRIPT_DIR / "dual_source.py").read_text(encoding="utf-8")
+
+    margin = re.search(r'"--margin", "([^"]+)"', stable).group(1)
+    edit = re.search(r'"--edit", "([^"]+)"', stable).group(1)
+    assert f'SILENCE_MARGIN = "{margin}"' in shared
+    assert f'SILENCE_EDIT = "{edit}"' in shared
 
 
 def test_shortcut_creator_exposes_both_routes_with_clear_names() -> None:
