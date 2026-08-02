@@ -42,15 +42,32 @@ class FakeItem:
 
 
 class FakeMediaPoolItem:
-    def __init__(self, name: str, frames: int, frame_rate: float = FRAME_RATE):
+    def __init__(
+        self,
+        name: str,
+        frames: int,
+        frame_rate: float = FRAME_RATE,
+        start_timecode: str = "00:00:00:00",
+    ):
         self._name = name
-        self._properties = {"Frames": str(frames), "FPS": str(frame_rate)}
+        self._properties = {
+            "Frames": str(frames),
+            "FPS": str(frame_rate),
+            "Start TC": start_timecode,
+        }
+        self.refused_timecode = False
 
     def GetName(self) -> str:
         return self._name
 
     def GetClipProperty(self, key: str) -> str:
         return self._properties[key]
+
+    def SetClipProperty(self, key: str, value: str) -> bool:
+        if key == "Start TC" and self.refused_timecode:
+            return False
+        self._properties[key] = value
+        return True
 
 
 class FakeTimeline:
@@ -79,22 +96,33 @@ class FakeTimeline:
 
 
 class FakeMediaPool:
-    def __init__(self, frames_by_name: dict, frame_rates: dict | None = None):
+    def __init__(
+        self,
+        frames_by_name: dict,
+        frame_rates: dict | None = None,
+        timecodes: dict | None = None,
+        refuse_timecode: set | None = None,
+    ):
         self.frames_by_name = frames_by_name
         self.frame_rates = frame_rates or {}
+        self.timecodes = timecodes or {}
+        self.refuse_timecode = refuse_timecode or set()
         self.appended: list[list[dict]] = []
+        self.imported: list[FakeMediaPoolItem] = []
 
     def ImportMedia(self, paths):
         items = []
         for path in paths:
             name = Path(path).name
-            items.append(
-                FakeMediaPoolItem(
-                    name,
-                    self.frames_by_name.get(name, 100000),
-                    self.frame_rates.get(name, FRAME_RATE),
-                )
+            item = FakeMediaPoolItem(
+                name,
+                self.frames_by_name.get(name, 100000),
+                self.frame_rates.get(name, FRAME_RATE),
+                self.timecodes.get(name, "00:00:00:00"),
             )
+            item.refused_timecode = name in self.refuse_timecode
+            items.append(item)
+        self.imported.extend(items)
         return items
 
     def AppendToTimeline(self, clip_infos):
@@ -211,6 +239,39 @@ def test_a_faster_timeline_still_places_the_recordings(pair, stub_pipeline):
     assert [c["recordFrame"] for c in camera] == [0, 600]
 
 
+def test_the_camera_timecode_is_zeroed_before_anything_is_placed(pair, stub_pipeline):
+    """Resolve reads startFrame against the clip's timecode, not its first frame.
+
+    The camera stamps the time of day (17:54:31;54 on the AZ-900 shoot), which
+    silently moved every camera clip 64 seconds away from the moment the cut list
+    picked, while the 00:00:00:00 screen capture stayed put.
+    """
+    media_pool = FakeMediaPool(
+        {"PPT.mkv": 100000, "camera.mp4": 100000},
+        timecodes={"camera.mp4": "17:54:31;54"},
+    )
+
+    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, FakeTimeline([]), pair, 0)
+
+    placed = {c["mediaPoolItem"] for c in media_pool.appended[0]}
+    assert placed, "nothing was placed"
+    for item in placed:
+        assert item.GetClipProperty("Start TC") == "00:00:00:00"
+
+
+def test_a_camera_whose_timecode_cannot_be_zeroed_stops_the_run(pair, stub_pipeline):
+    media_pool = FakeMediaPool(
+        {"PPT.mkv": 100000, "camera.mp4": 100000},
+        timecodes={"camera.mp4": "17:54:31;54"},
+        refuse_timecode={"camera.mp4"},
+    )
+
+    assert EDITOR.build_dual_source_timeline(
+        FakeProject(), media_pool, FakeTimeline([]), pair, 0
+    ) is False
+    assert media_pool.appended == []
+
+
 def test_a_failed_sync_stops_the_run_instead_of_guessing(pair, stub_pipeline, monkeypatch):
     def refuse(reference, target, **kwargs):
         raise EDITOR.audio_sync.AudioSyncError("did not correlate")
@@ -248,7 +309,7 @@ def test_the_measured_placement_is_applied_to_every_clip(pair, stub_pipeline):
 def test_the_cut_list_is_written_next_to_the_recording(pair, tmp_path, monkeypatch):
     recorded = {}
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         recorded["command"] = command
         Path(command[command.index("--output") + 1]).write_text(
             json.dumps({"version": "3", "timebase": "30/1", "v": [[]]}), encoding="utf-8"
@@ -301,7 +362,7 @@ def test_a_newer_auto_editor_export_name_is_tried_first(pair, monkeypatch):
     """Newer versions know "v3", older ones only "json"; both write the same file."""
     attempts = []
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         attempts.append(command[command.index("--export") + 1])
         if attempts[-1] != "json":
             raise EDITOR.subprocess.CalledProcessError(
@@ -328,7 +389,7 @@ def test_a_newer_auto_editor_export_name_is_tried_first(pair, monkeypatch):
 def test_a_real_auto_editor_failure_is_not_retried_as_a_version_problem(pair, monkeypatch):
     attempts = []
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         attempts.append(command)
         raise EDITOR.subprocess.CalledProcessError(1, command, stderr="Error! No such file")
 
@@ -341,7 +402,7 @@ def test_a_real_auto_editor_failure_is_not_retried_as_a_version_problem(pair, mo
 def test_the_cut_list_is_found_even_though_v3_renames_the_file(pair, monkeypatch):
     """Current auto-editor rewrites the --output extension to .v3."""
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         requested = Path(command[command.index("--output") + 1])
         # Whatever was asked for, this version writes a .v3 file.
         requested.with_suffix(".v3").write_text(
@@ -364,7 +425,7 @@ def test_the_cut_list_is_found_even_though_v3_renames_the_file(pair, monkeypatch
 
 
 def test_a_run_that_writes_nothing_is_reported_instead_of_crashing(pair, monkeypatch):
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         class Result:
             stdout = ""
             stderr = ""
@@ -382,7 +443,7 @@ def test_a_stale_cut_list_from_a_previous_run_is_not_read(pair, monkeypatch):
     stale = pair.folder / "_auto_editor_cuts.v3"
     stale.write_text(json.dumps({"version": "3", "timebase": "1/1", "v": [[]]}), encoding="utf-8")
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         raise EDITOR.subprocess.CalledProcessError(1, command, stderr="Error! Boom")
 
     monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
@@ -393,6 +454,42 @@ def test_a_stale_cut_list_from_a_previous_run_is_not_read(pair, monkeypatch):
     assert not stale.exists()
 
 
+def test_the_version_fallback_survives_output_the_code_page_cannot_decode(pair, monkeypatch):
+    """auto-editor reports the offending path back, in bytes CP932 cannot read.
+
+    Asking subprocess to decode that text kills its reader thread, and the error
+    body the version check reads goes missing with it.
+    """
+    attempts = []
+
+    def fake_run(command, **run_options):
+        assert not run_options.get("text"), "the output has to be taken as bytes"
+        attempts.append(command[command.index("--export") + 1])
+        if attempts[-1] != "json":
+            raise EDITOR.subprocess.CalledProcessError(
+                1,
+                command,
+                stderr='Error! Invalid export format: "v3"\n'.encode("utf-8")
+                + b"\x8f\x41 unreadable",
+            )
+        Path(command[command.index("--output") + 1]).write_text(
+            json.dumps({"version": "3", "timebase": "60/1", "v": [[]]}), encoding="utf-8"
+        )
+
+        class Result:
+            stdout = b""
+            stderr = b""
+
+        return Result()
+
+    monkeypatch.setattr(EDITOR.subprocess, "run", fake_run)
+
+    document = EDITOR.run_auto_editor_cut_list(pair.camera, pair.folder / "cuts.json")
+
+    assert attempts == ["v3", "json"]
+    assert document["timebase"] == "60/1"
+
+
 def test_a_cut_list_written_in_the_windows_code_page_is_still_read(pair, monkeypatch):
     """auto-editor on Windows writes the input path in CP932, not UTF-8."""
     document = {
@@ -401,7 +498,7 @@ def test_a_cut_list_written_in_the_windows_code_page_is_still_read(pair, monkeyp
         "v": [[{"start": 0, "dur": 300, "offset": 90, "src": "C:\\Youtube動画作成場所\\C2059.MP4"}]],
     }
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         requested = Path(command[command.index("--output") + 1])
         requested.write_bytes(json.dumps(document, ensure_ascii=False).encode("cp932"))
 
@@ -422,7 +519,7 @@ def test_a_cut_list_written_in_the_windows_code_page_is_still_read(pair, monkeyp
 def test_a_cut_list_in_neither_encoding_still_yields_its_numbers(pair, monkeypatch):
     """Undecodable bytes in a path must not stop a run that only needs numbers."""
 
-    def fake_run(command, capture_output, text, check):
+    def fake_run(command, **run_options):
         requested = Path(command[command.index("--output") + 1])
         broken = b'{"version": "3", "timebase": "60/1", "src": "\xff\xfe", "v": [[]]}'
         requested.write_bytes(broken)

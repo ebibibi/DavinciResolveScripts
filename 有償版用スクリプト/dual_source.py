@@ -15,6 +15,7 @@ launching DaVinci Resolve.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -25,7 +26,7 @@ CAMERA_SUFFIX = ".mp4"
 # The silence cut is tuned to one voice, not to one route, so both editors use
 # the same numbers. A test pins them together to stop them drifting apart again.
 SILENCE_MARGIN = "0.3sec"
-SILENCE_EDIT = "audio:threshold=1%"
+SILENCE_EDIT = "audio:threshold=3%"
 
 SLIDES_TRACK = 1
 CAMERA_TRACK = 2
@@ -34,10 +35,12 @@ CAMERA_AUDIO_TRACK = 1
 VIDEO_ONLY = 1
 AUDIO_ONLY = 2
 
-# The camera is usually started first, so the talk can begin a moment before the
-# slide capture exists. Up to five seconds of that head is trimmed; more than
-# that means the two files are not the same session.
-MAXIMUM_HEAD_TRIM_SECONDS = 5.0
+# The camera is started by hand and the slide capture by OBS, so in practice the
+# camera rolls first by anything from a few seconds to a few minutes of setup.
+# That head is trimmed rather than refused. The real guard against two unrelated
+# files is the audio sync confidence, so this limit only has to be absurd: five
+# minutes of unmatched head means the offset itself is not to be believed.
+MAXIMUM_HEAD_TRIM_SECONDS = 300.0
 
 # Measured from the manually edited AZ-900 project, where the timeline is
 # 1920x1080. The slide capture is shrunk and moved left, which frees the right
@@ -121,22 +124,30 @@ def find_recording_pair(folder: Path) -> RecordingPair | None:
     return RecordingPair(folder=folder, slides=slides[0], camera=cameras[0])
 
 
+def recorded_at(pair: RecordingPair) -> float:
+    """Return when the two recordings themselves were last written.
+
+    The folder's own timestamp is not usable here: this tool drops a cut list
+    into the folder it processes, which makes that folder look like the newest
+    recording and pins every later run to the same lecture.
+    """
+    return max(pair.slides.stat().st_mtime, pair.camera.stat().st_mtime)
+
+
 def find_latest_recording_pair(working_dir: Path) -> RecordingPair | None:
-    """Return the newest subfolder that holds a slide and camera pair."""
+    """Return the subfolder whose recordings are the most recent."""
     working_dir = Path(working_dir)
     if not working_dir.is_dir():
         return None
 
-    folders = sorted(
-        (p for p in working_dir.iterdir() if p.is_dir()),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    for folder in folders:
-        pair = find_recording_pair(folder)
-        if pair is not None:
-            return pair
-    return None
+    pairs = [
+        pair
+        for pair in (find_recording_pair(p) for p in working_dir.iterdir() if p.is_dir())
+        if pair is not None
+    ]
+    if not pairs:
+        return None
+    return max(pairs, key=recorded_at)
 
 
 def parse_cut_list(document: dict | str | Path) -> tuple[Segment, ...]:
@@ -178,6 +189,44 @@ def cut_list_frame_rate(document: dict) -> Fraction:
 
 def seconds_to_frames(seconds: float, frame_rate: float) -> int:
     return int(round(seconds * frame_rate))
+
+
+def conform_factor(source_frame_rate: float, timeline_frame_rate: float) -> int:
+    """How many timeline frames Resolve gives one frame of this recording.
+
+    Resolve conforms a clip by its nominal rate, not its exact one: a 59.94 fps
+    camera on a 60 fps timeline keeps one frame per frame, while a 30 fps screen
+    capture gets two. Measured on the AZ-900 project, where 57 source frames of
+    the 30 fps capture became 114 timeline frames and 114 camera frames stayed
+    114.
+
+    A ratio that is not a whole multiple is refused rather than guessed at,
+    because the wrong factor drifts the two tracks apart a frame at a time.
+    """
+    ratio = timeline_frame_rate / source_frame_rate
+    factor = int(round(ratio))
+    if factor < 1 or abs(ratio - factor) > 0.01:
+        raise DualSourceError(
+            f"A {source_frame_rate} fps recording does not fit a "
+            f"{timeline_frame_rate} fps timeline in whole frames"
+        )
+    return factor
+
+
+def placement_scale(source_frame_rate: float, timeline_frame_rate: float, factor: int) -> float:
+    """How far a requested source frame has to be pulled back to land correctly.
+
+    Resolve reads `startFrame` through the conform it applies to the clip, so a
+    59.94 fps camera on a 60 fps timeline lands 0.1% deeper into the media than
+    asked — measured at 119 frames two thirds of the way through the AZ-900 talk,
+    and 156 by its end. Scaling the request by the clip's conformed rate over the
+    timeline's cancels it exactly. A 30 fps capture conforms to 60 on the nose, so
+    its scale is 1 and nothing moves.
+
+    This applies to where a clip starts, not to how long it is: the frames between
+    `startFrame` and `endFrame` are laid down one for one.
+    """
+    return source_frame_rate * factor / timeline_frame_rate
 
 
 @dataclass(frozen=True)
@@ -249,13 +298,21 @@ def build_placements(
     if head_shortfall > maximum_head_trim:
         raise DualSourceError(
             "The slide recording starts too late: it is missing the first "
-            f"{head_shortfall:.1f} seconds of the talk. Check that both files "
-            "belong to the same session."
+            f"{head_shortfall:.1f} seconds of the talk, which is more than the "
+            f"{maximum_head_trim:.0f} seconds a late start can explain. Check "
+            "that both files belong to the same session."
         )
 
     slides_limit = (
         slides_frame_count / rates.slides if slides_frame_count is not None else None
     )
+
+    slides_factor = conform_factor(rates.slides, rates.timeline)
+    camera_factor = conform_factor(rates.camera, rates.timeline)
+    # Each track has to cover exactly the same span, so a segment lasts a whole
+    # number of source frames on both. The shortest length that does is their
+    # least common multiple, which every segment is rounded to.
+    step = math.lcm(slides_factor, camera_factor)
 
     placements: list[ClipPlacement] = []
     record_frame = timeline_start_frame
@@ -281,23 +338,38 @@ def build_placements(
             # and reported instead.
             break
 
-        for role, source_second, rate, track, media_type in (
-            ("slides", slide_second, rates.slides, SLIDES_TRACK, VIDEO_ONLY),
-            ("camera", camera_second, rates.camera, CAMERA_TRACK, VIDEO_ONLY),
-            ("camera_audio", camera_second, rates.camera, CAMERA_AUDIO_TRACK, AUDIO_ONLY),
+        # One length in timeline frames drives every track. Deriving each track's
+        # length from seconds instead lets the two roundings disagree, which
+        # leaves a one frame hole between clips and shifts V1 against V2.
+        timeline_frames = seconds_to_frames(duration_seconds, rates.timeline)
+        timeline_frames = max(step, timeline_frames - timeline_frames % step)
+
+        for role, source_second, rate, factor, track, media_type in (
+            ("slides", slide_second, rates.slides, slides_factor, SLIDES_TRACK, VIDEO_ONLY),
+            ("camera", camera_second, rates.camera, camera_factor, CAMERA_TRACK, VIDEO_ONLY),
+            (
+                "camera_audio", camera_second, rates.camera, camera_factor,
+                CAMERA_AUDIO_TRACK, AUDIO_ONLY,
+            ),
         ):
-            start_frame = seconds_to_frames(source_second, rate)
+            # Only the entry point is scaled. Resolve lays the requested number of
+            # frames onto the timeline one for one, so scaling the length as well
+            # loses a frame on every clip past about eight seconds and opens a
+            # hole the next clip cannot close.
+            scale = placement_scale(rate, rates.timeline, factor)
+            start_frame = int(round(seconds_to_frames(source_second, rate) * scale))
+            length = timeline_frames // factor
             placements.append(
                 ClipPlacement(
                     role=role,
                     start_frame=start_frame,
-                    end_frame=start_frame + seconds_to_frames(duration_seconds, rate),
+                    end_frame=start_frame + length,
                     record_frame=record_frame,
                     media_type=media_type,
                     track_index=track,
                 )
             )
-        record_frame += seconds_to_frames(duration_seconds, rates.timeline)
+        record_frame += timeline_frames
         placed += 1
 
     if not placements:

@@ -30,8 +30,8 @@ def test_stable_editor_uses_current_silence_cut_settings() -> None:
     content = (SCRIPT_DIR / "auto_video_editor.py").read_text(encoding="utf-8")
 
     assert '"--margin", "0.3sec"' in content
-    assert '"--edit", "audio:threshold=1%"' in content
-    assert "threshold=3%" not in content
+    assert '"--edit", "audio:threshold=3%"' in content
+    assert "threshold=1%" not in content
 
 
 def test_both_routes_cut_silence_with_the_same_settings() -> None:

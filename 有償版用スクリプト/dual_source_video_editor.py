@@ -99,6 +99,23 @@ def read_cut_list(path):
     return json.loads(raw.decode("utf-8", "replace"))
 
 
+def decode_output(raw):
+    """auto-editorの出力を文字列にする。読めない字があっても捨てない。
+
+    エラー本文は版の判定にも使うので、1バイト化けたくらいで失えない。
+    """
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    for encoding in ("utf-8", "cp932"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", "replace")
+
+
 def locate_cut_list(output_path):
     """auto-editorが実際に書いたファイルを探す
 
@@ -133,9 +150,12 @@ def run_auto_editor_cut_list(camera_path, output_path):
         ]
         print(f"実行コマンド: {' '.join(command)}")
         try:
-            subprocess.run(command, capture_output=True, text=True, check=True)
+            # 出力は生バイトで受ける。text=True はコンソールのコードページで
+            # 解釈するため、日本語パスを含むauto-editorの出力で復号に失敗し、
+            # 読み取りスレッドごと死んでエラー本文が取れなくなる。
+            subprocess.run(command, capture_output=True, check=True)
         except subprocess.CalledProcessError as error:
-            stderr = error.stderr or ""
+            stderr = decode_output(error.stderr)
             if "Invalid export format" in stderr or "Export must be" in stderr:
                 print(f"  この版のauto-editorは --export {export_format} を知りません")
                 continue
@@ -157,6 +177,38 @@ def run_auto_editor_cut_list(camera_path, output_path):
     names = " / ".join(name for name, _ in EXPORT_FORMATS)
     print(f"✗ auto-editorが {names} のどれも受け付けませんでした")
     return None
+
+
+ZERO_TIMECODE = "00:00:00:00"
+
+
+def normalize_start_timecode(media_pool_item) -> bool:
+    """素材の開始タイムコードを0にする。これをしないと配置位置が丸ごとずれる。
+
+    AppendToTimeline の startFrame は素材の先頭からの位置ではなく、素材の
+    タイムコードを基準に解釈される。カメラは撮影時刻のタイムコード
+    （実測 17:54:31;54、ドロップフレーム）を持つため、頼んだ位置が約64.5秒
+    ずれて別の場面が並び、映像も音声も無音カットの結果と一致しなくなる。
+    画面録画は 00:00:00:00 なので無傷であり、2つの映像が噛み合わない原因は
+    ここだけにあった。
+    """
+    try:
+        current = media_pool_item.GetClipProperty("Start TC")
+    except Exception:
+        current = None
+    if current in (ZERO_TIMECODE, "00:00:00;00"):
+        return True
+
+    try:
+        changed = bool(media_pool_item.SetClipProperty("Start TC", ZERO_TIMECODE))
+    except Exception as error:
+        print(f"✗ 開始タイムコードを0にできません（{current}）: {error}")
+        return False
+    if not changed:
+        print(f"✗ 開始タイムコードを0にできませんでした（{current}）")
+        return False
+    print(f"✓ 開始タイムコードを {current} から {ZERO_TIMECODE} に直しました")
+    return True
 
 
 def clip_frame_rate(media_pool_item, fallback):
@@ -224,6 +276,7 @@ def append_ending_video(media_pool, record_frame) -> bool:
         return False
 
     ending_clip = ending_clips[0]
+    normalize_start_timecode(ending_clip)
     try:
         ending_frames = int(ending_clip.GetClipProperty("Frames"))
         appended = media_pool.AppendToTimeline([{
@@ -286,6 +339,12 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
     camera_item = items_by_name.get(pair.camera.name)
     if slides_item is None or camera_item is None:
         print("✗ インポートした素材を特定できませんでした")
+        return False
+
+    # 位置の計算はすべて素材の先頭からのフレーム数で行うので、先にタイムコードを
+    # 揃える。ここを飛ばすとカメラだけ別の場面が並ぶ。
+    if not all(normalize_start_timecode(item) for item in (slides_item, camera_item)):
+        print("✗ 素材のタイムコードを揃えられないため中止します")
         return False
 
     try:

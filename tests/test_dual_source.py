@@ -69,18 +69,36 @@ def test_a_folder_with_only_one_recording_is_not_a_pair(tmp_path):
     assert DUAL_SOURCE.find_recording_pair(folder) is None
 
 
+def touch(path: Path, when: int) -> None:
+    import os
+
+    os.utime(path, (when, when))
+
+
 def test_the_newest_pair_folder_wins(tmp_path):
     old = make_pair_folder(tmp_path, "az900-1", ["PPT.mkv", "camera.mp4"])
     new = make_pair_folder(tmp_path, "az900-2", ["PPT.mkv", "camera.mp4"])
     make_pair_folder(tmp_path, "az900-3", ["only.mkv"])
-    import os
-
-    os.utime(old, (1_000_000, 1_000_000))
-    os.utime(new, (2_000_000, 2_000_000))
+    for name in ("PPT.mkv", "camera.mp4"):
+        touch(old / name, 1_000_000)
+        touch(new / name, 2_000_000)
 
     pair = DUAL_SOURCE.find_latest_recording_pair(tmp_path)
 
     assert pair.folder == new
+
+
+def test_a_cut_list_left_behind_does_not_make_an_old_folder_look_newest(tmp_path):
+    # The editor writes its cut list into the folder it processed, which used to
+    # bump that folder's timestamp and pin every later run to the same lecture.
+    processed = make_pair_folder(tmp_path, "az900-1", ["PPT.mkv", "camera.mp4"])
+    newest = make_pair_folder(tmp_path, "az900-2", ["PPT.mkv", "camera.mp4"])
+    for name in ("PPT.mkv", "camera.mp4"):
+        touch(processed / name, 1_000_000)
+        touch(newest / name, 2_000_000)
+    (processed / "_auto_editor_cuts.v3").write_bytes(b"{}")
+
+    assert DUAL_SOURCE.find_latest_recording_pair(tmp_path).folder == newest
 
 
 def test_cut_list_is_read_as_segments():
@@ -156,6 +174,84 @@ def test_a_camera_that_differs_from_the_slide_capture_keeps_its_own_frames():
     assert (slides.start_frame, slides.end_frame) == (240, 540)
 
 
+def test_both_tracks_cover_the_same_span_on_the_real_frame_rates():
+    """A 30 fps capture and a 59.94 fps camera on the template's 60 fps timeline.
+
+    Resolve gives a 30 fps frame two timeline frames and a 59.94 fps frame one, so
+    a length worked out separately per track rounds differently on each. That left
+    a one frame hole between clips and pulled V1 out of step with V2.
+    """
+    real = rates(timeline=60.0, slides=30.0, camera=59.94, cut_list=59.94)
+    plan = plan_of(
+        (0, 114, 1253), (114, 50, 1416), (164, 67, 1491), (231, 39, 1896),
+        rates=real,
+    )
+
+    slides = [p for p in plan.placements if p.role == "slides"]
+    camera = [p for p in plan.placements if p.role == "camera"]
+    spans = [
+        following - current
+        for current, following in zip(
+            [p.record_frame for p in camera],
+            [p.record_frame for p in camera[1:]] + [plan.end_frame],
+        )
+    ]
+    # Every clip butts against the next one, so no black frame shows through, and
+    # a slide frame is worth two timeline frames while a camera frame is worth one.
+    assert all(span > 0 for span in spans)
+    for slide, shot, span in zip(slides, camera, spans):
+        assert (slide.end_frame - slide.start_frame) * 2 == span
+        assert shot.end_frame - shot.start_frame == span
+
+
+def test_a_long_clip_asks_for_its_full_length_even_though_its_start_moved():
+    """Scaling the length as well loses a frame past about eight seconds."""
+    real = rates(timeline=60.0, slides=30.0, camera=59.94, cut_list=59.94)
+    plan = plan_of((0, 771, 60000), rates=real)
+
+    shot = next(p for p in plan.placements if p.role == "camera")
+    assert shot.start_frame == 59940  # 60000 pulled back by 59.94/60
+    # 771 frames of a 59.94 fps cut list is 772 frames of a 60 fps timeline, and
+    # the request keeps all 772 rather than shrinking with the start.
+    assert shot.end_frame - shot.start_frame == 772
+    assert plan.end_frame == 772
+
+
+def test_the_camera_request_is_pulled_back_by_the_conform_it_will_be_read_through():
+    """Resolve lands 0.1% deeper into a 59.94 fps camera than the request says."""
+    real = rates(timeline=60.0, slides=30.0, camera=59.94, cut_list=59.94)
+    plan = plan_of((0, 60, 119379), rates=real)
+
+    camera = next(p for p in plan.placements if p.role == "camera")
+    # Asking for 119260 is what makes Resolve show frame 119379.
+    assert camera.start_frame == 119260
+    # The 30 fps capture conforms to 60 exactly, so its request is left alone.
+    slide = next(p for p in plan.placements if p.role == "slides")
+    assert slide.start_frame == DUAL_SOURCE.seconds_to_frames(119379 / 59.94, 30.0)
+
+
+def test_the_audio_matches_the_camera_video_frame_for_frame():
+    real = rates(timeline=60.0, slides=30.0, camera=59.94, cut_list=59.94)
+    plan = plan_of((0, 114, 1253), (114, 50, 1416), rates=real)
+
+    camera = [p for p in plan.placements if p.role == "camera"]
+    audio = [p for p in plan.placements if p.role == "camera_audio"]
+    assert [(p.start_frame, p.end_frame) for p in camera] == [
+        (p.start_frame, p.end_frame) for p in audio
+    ]
+
+
+def test_a_recording_that_does_not_divide_into_the_timeline_is_refused():
+    with pytest.raises(DUAL_SOURCE.DualSourceError, match="whole frames"):
+        DUAL_SOURCE.conform_factor(25.0, 60.0)
+
+
+def test_a_camera_at_the_timeline_rate_keeps_one_frame_per_frame():
+    assert DUAL_SOURCE.conform_factor(59.94, 60.0) == 1
+    assert DUAL_SOURCE.conform_factor(30.0, 60.0) == 2
+    assert DUAL_SOURCE.conform_factor(30.0, 30.0) == 1
+
+
 def test_a_frame_rate_of_zero_is_refused():
     with pytest.raises(DUAL_SOURCE.DualSourceError, match="must be positive"):
         rates(camera=0.0)
@@ -184,8 +280,20 @@ def test_the_opening_clip_pushes_everything_later():
 
 
 def test_a_slide_recording_that_starts_far_too_late_is_refused():
-    with pytest.raises(DUAL_SOURCE.DualSourceError, match="missing the first 96.5 seconds"):
-        plan_of((0, 650, 3104), offset_seconds=200.0)
+    with pytest.raises(DUAL_SOURCE.DualSourceError, match="missing the first 496.5 seconds"):
+        plan_of((0, 650, 3104), offset_seconds=600.0)
+
+
+def test_a_camera_started_minutes_before_the_slides_is_trimmed_not_refused():
+    # Measured from the AZ-900 recordings: the camera rolled 17.3 seconds early,
+    # which the old five-second limit refused outright.
+    plan = plan_of((0, 900, 0), (900, 60000, 1200), offset_seconds=17.32)
+
+    assert plan.segments_placed == 2
+    assert plan.head_trim_seconds == pytest.approx(17.32)
+    # What survives of the opening segment starts at the first frame of the slides.
+    slides = [p for p in plan.placements if p.role == "slides"]
+    assert (slides[0].start_frame, slides[0].end_frame) == (0, 380)
 
 
 def test_a_talk_that_begins_before_the_slide_capture_is_trimmed_on_both_tracks():
