@@ -47,8 +47,9 @@ ENDING_VIDEO_CANDIDATES = [
 
 OPENING_CLIP_MARKER = "01_EBI_CHAN_OP"
 
-# 同じv3 JSONを出す --export の名前。新しい版から順に試す。
-EXPORT_FORMATS = ("v3", "json")
+# 同じv3 JSONを出す --export の名前と、その版が強制する拡張子。新しい版から試す。
+# 新版は --output の拡張子を無視して .v3 に書き換えるので、こちらから合わせる。
+EXPORT_FORMATS = (("v3", ".v3"), ("json", ".json"))
 
 
 def first_existing_path(candidates):
@@ -76,20 +77,43 @@ def find_opening_end_frame(timeline) -> int:
     return 0
 
 
+def clear_previous_cut_lists(output_path):
+    """前回の書き出しを消す。古いファイルを読んで気付かない事故を防ぐ。"""
+    output_path = Path(output_path)
+    for stale in output_path.parent.glob(output_path.stem + ".*"):
+        stale.unlink()
+
+
+def locate_cut_list(output_path):
+    """auto-editorが実際に書いたファイルを探す
+
+    新しい版は --output の拡張子を書き換えるので、頼んだ名前に無いことがある。
+    """
+    output_path = Path(output_path)
+    if output_path.exists():
+        return output_path
+    written = sorted(output_path.parent.glob(output_path.stem + ".*"))
+    return written[0] if written else None
+
+
 def run_auto_editor_cut_list(camera_path, output_path):
     """auto-editorを実行し、カットリスト（v3 JSON）を得る
 
     同じv3 JSONを出す指定の名前がバージョンで変わっている。新しい版は "v3"、
     古い版は "json" しか受け付けないので、順に試す。
     """
-    for export_format in EXPORT_FORMATS:
+    output_path = Path(output_path)
+    clear_previous_cut_lists(output_path)
+
+    for export_format, suffix in EXPORT_FORMATS:
+        requested = output_path.with_suffix(suffix)
         command = [
             "auto-editor",
             str(camera_path),
             "--margin", dual_source.SILENCE_MARGIN,
             "--edit", dual_source.SILENCE_EDIT,
             "--export", export_format,
-            "--output", str(output_path),
+            "--output", str(requested),
             "--no-open",
         ]
         print(f"実行コマンド: {' '.join(command)}")
@@ -107,9 +131,16 @@ def run_auto_editor_cut_list(camera_path, output_path):
             print("✗ auto-editorが見つかりません")
             return None
 
-        return json.loads(Path(output_path).read_text(encoding="utf-8"))
+        written = locate_cut_list(requested)
+        if written is None:
+            print(f"✗ auto-editorはカットリストを書きませんでした: {requested}")
+            return None
+        if written != requested:
+            print(f"  auto-editorは {written.name} に書き出しました")
+        return json.loads(written.read_text(encoding="utf-8"))
 
-    print(f"✗ auto-editorが {' / '.join(EXPORT_FORMATS)} のどれも受け付けませんでした")
+    names = " / ".join(name for name, _ in EXPORT_FORMATS)
+    print(f"✗ auto-editorが {names} のどれも受け付けませんでした")
     return None
 
 
