@@ -84,6 +84,21 @@ def clear_previous_cut_lists(output_path):
         stale.unlink()
 
 
+def read_cut_list(path):
+    """カットリストを読む。日本語パスの文字コードで転ばないようにする。
+
+    Windowsのauto-editorはJSONの中の入力パスをコードページ(CP932)で書き出すため、
+    UTF-8として読めないことがある。必要なのは数値だけなので、パスが化けても構わない。
+    """
+    raw = Path(path).read_bytes()
+    for encoding in ("utf-8", "cp932"):
+        try:
+            return json.loads(raw.decode(encoding))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+    return json.loads(raw.decode("utf-8", "replace"))
+
+
 def locate_cut_list(output_path):
     """auto-editorが実際に書いたファイルを探す
 
@@ -137,7 +152,7 @@ def run_auto_editor_cut_list(camera_path, output_path):
             return None
         if written != requested:
             print(f"  auto-editorは {written.name} に書き出しました")
-        return json.loads(written.read_text(encoding="utf-8"))
+        return read_cut_list(written)
 
     names = " / ".join(name for name, _ in EXPORT_FORMATS)
     print(f"✗ auto-editorが {names} のどれも受け付けませんでした")
