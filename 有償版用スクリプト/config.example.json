@@ -19,5 +19,20 @@
     "manual_title": "",
     "manual_highlights": [],
     "transcript_command": []
+  },
+  "advanced_edit": {
+    "captions": true,
+    "telops": true,
+    "chapters": true,
+    "sound_effects": true,
+    "maximum_telops": 24,
+    "maximum_chapters": 6,
+    "chapter_seconds": 3.5,
+    "minimum_chapter_gap_seconds": 120,
+    "telop_minimum_seconds": 1.2,
+    "telop_maximum_seconds": 4.0,
+    "caption_maximum_characters": 40,
+    "video_crf": 18,
+    "video_preset": "medium"
   }
 }
