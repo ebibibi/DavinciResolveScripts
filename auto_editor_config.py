@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
+DEFAULT_CONFIG_PATH = (
+    Path(__file__).resolve().parent / "有償版用スクリプト" / "config.json"
+)
 
 
 def _number(

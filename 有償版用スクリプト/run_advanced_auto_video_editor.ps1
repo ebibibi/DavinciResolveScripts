@@ -15,13 +15,9 @@ foreach ($Command in $RequiredCommands) {
 }
 
 $Arguments = @("highlight_video.py")
-$RepoConfig = Join-Path (Split-Path -Parent $ScriptDir) "config.json"
 $LocalConfig = Join-Path $ScriptDir "config.local.json"
 $LegacyConfig = Join-Path $ScriptDir "config.json"
-if (Test-Path $RepoConfig) {
-    $Arguments += @("--config", $RepoConfig)
-}
-elseif (Test-Path $LocalConfig) {
+if (Test-Path $LocalConfig) {
     $Arguments += @("--config", $LocalConfig)
 }
 elseif (Test-Path $LegacyConfig) {

@@ -3,7 +3,19 @@ from pathlib import Path
 
 import pytest
 
-from auto_editor_config import AutoEditorConfig, load_auto_editor_config
+from auto_editor_config import (
+    DEFAULT_CONFIG_PATH,
+    AutoEditorConfig,
+    load_auto_editor_config,
+)
+
+REPO_ROOT = Path(__file__).parents[1]
+
+
+def test_default_config_stays_beside_the_paid_scripts() -> None:
+    assert DEFAULT_CONFIG_PATH == REPO_ROOT / "有償版用スクリプト" / "config.json"
+    assert (REPO_ROOT / "有償版用スクリプト" / "config.example.json").exists()
+    assert not (REPO_ROOT / "config.example.json").exists()
 
 
 def test_missing_local_config_uses_the_shipped_defaults(tmp_path: Path) -> None:

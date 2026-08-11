@@ -760,7 +760,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             (
                 candidate
                 for candidate in (
-                    _REPO_ROOT / "config.json",
                     script_dir / "config.local.json",
                     script_dir / "config.json",
                 )
