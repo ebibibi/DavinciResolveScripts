@@ -3,14 +3,14 @@ type: adr
 id: ADR-011
 title: Configure silence settings per recording environment
 decision: Read one ignored repository-root config.json in every auto-editor workflow while retaining the prior values as defaults.
-status: accepted
+status: superseded
 date: 2026-08-11
 deciders: [Masahiko Ebisuda, Codex]
 tags: [davinci-resolve, auto-editor, configuration, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes: ADR-010
-superseded_by:
+superseded_by: ADR-012
 ---
 
 # Configure silence settings per recording environment

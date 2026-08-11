@@ -25,7 +25,8 @@ DaVinci Resolve process:
 1. Start or connect to DaVinci Resolve.
 2. Create a project from `テンプレート.drp`.
 3. Find the newest OBS recording.
-4. Use `auto-editor` to remove silence with the values from `config.json`
+4. Use `auto-editor` to remove silence with the values from
+   `有償版用スクリプト/config.json`
    (default: `audio:threshold=1%` and `--margin 0.3sec`).
 5. Import the generated timeline and combine it with the template timeline and
    ending clip.
@@ -70,7 +71,8 @@ python "有償版用スクリプト/audio_sync.py" slides.mkv camera.mp4
 ## Advanced workflow
 
 1. Find the newest OBS recording.
-2. Use `auto-editor` to remove silence with the values from `config.json`.
+2. Use `auto-editor` to remove silence with the values from
+   `有償版用スクリプト/config.json`.
 3. Transcribe the cut master, so every timestamp is on the edited timeline.
 4. Select one highlight for a short video, two for a 20+ minute video, or three
    for a 45+ minute video.
@@ -126,7 +128,8 @@ For the stable workflow, run:
 
 For the advanced workflow:
 
-1. Copy the repository-root `config.example.json` to `config.json`.
+1. Copy `有償版用スクリプト/config.example.json` to
+   `有償版用スクリプト/config.json`.
 2. Set `working_dirs` to the OBS recording folder.
 3. Run `有償版用スクリプト/run_advanced_auto_video_editor.ps1`.
 4. Review the generated MP4 and `highlight_plan.json` under
@@ -143,9 +146,9 @@ python "有償版用スクリプト/highlight_video.py" "C:\Videos\recording.mkv
 
 ## Silence-cut configuration
 
-`config.json` is ignored by Git, so each recording environment can keep its own
-tuning. The same values are used by the stable, dual-source, advanced, and free
-workflows:
+`有償版用スクリプト/config.json` is ignored by Git, so each recording
+environment can keep its existing local tuning. The same file is used by the
+stable, dual-source, advanced, and free workflows:
 
 ```json
 {
@@ -157,9 +160,9 @@ workflows:
 ```
 
 `threshold_percent` must be greater than 0 and no more than 100.
-`margin_seconds` must be 0 or greater. If `config.json` does not exist, the
-shown values are used as defaults. Invalid values stop the run with a clear
-error instead of silently using different settings.
+`margin_seconds` must be 0 or greater. If the file does not exist, the shown
+values are used as defaults. Invalid values stop the run with a clear error
+instead of silently using different settings.
 
 ## Opening-highlight configuration
 
