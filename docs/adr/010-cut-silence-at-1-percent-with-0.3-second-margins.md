@@ -3,14 +3,14 @@ type: adr
 id: ADR-010
 title: Cut silence at 1 percent with 0.3-second margins
 decision: Use a 1% audio threshold and 0.3-second margins, and keep the number in one place both routes read.
-status: accepted
+status: superseded
 date: 2026-08-02
 deciders: [Masahiko Ebisuda, Claude]
 tags: [davinci-resolve, auto-editor, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes: ADR-008
-superseded_by:
+superseded_by: ADR-011
 ---
 
 # Cut silence at 1 percent with 0.3-second margins

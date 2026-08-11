@@ -1,4 +1,8 @@
 {
+  "auto_editor": {
+    "threshold_percent": 1,
+    "margin_seconds": 0.3
+  },
   "working_dirs": [
     "C:\\Users\\YOUR_NAME\\Videos\\OBS"
   ],

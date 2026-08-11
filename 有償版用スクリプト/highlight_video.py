@@ -14,9 +14,13 @@ from pathlib import Path
 from typing import Any, Sequence
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPT_DIR.parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+from auto_editor_config import AutoEditorConfig, parse_auto_editor_config  # noqa: E402
 from highlight_plan import (  # noqa: E402
     Highlight,
     HighlightPlan,
@@ -76,6 +80,7 @@ class PipelineConfig:
     manual_title: str = ""
     manual_highlights: tuple[dict[str, float], ...] = ()
     transcript_command: tuple[str, ...] = ()
+    auto_editor: AutoEditorConfig = AutoEditorConfig()
 
 
 def build_ai_plan(
@@ -204,16 +209,17 @@ def render_cut_master(
     source: Path,
     output_dir: Path,
     reporter: ProgressReporter | None = None,
+    auto_editor: AutoEditorConfig = AutoEditorConfig(),
 ) -> Path:
     """Render the proven auto-editor silence cut as one high-quality MP4."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output = output_dir / f"{source.stem}.cut_master.mp4"
-    for edit_method in ("audio:threshold=3%", "none"):
+    for edit_method in (auto_editor.edit_expression, "none"):
         # Without --no-open, auto-editor launches the media player on the cut
         # master and the rest of the pipeline keeps running behind it.
         command = ["auto-editor", str(source), "--no-open"]
         if edit_method != "none":
-            command.extend(["--margin", "0.2sec"])
+            command.extend(["--margin", auto_editor.margin])
         command.extend(
             [
                 "--edit",
@@ -540,7 +546,12 @@ def run_pipeline(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     reporter.start_stage(steps[0], step=1, steps=len(steps))
-    cut_master = render_cut_master(source, output_dir, reporter)
+    cut_master = render_cut_master(
+        source,
+        output_dir,
+        reporter,
+        config.auto_editor,
+    )
     reporter.finish_stage(cut_master.name)
 
     reporter.start_stage(steps[1], step=2, steps=len(steps))
@@ -694,6 +705,7 @@ def load_config(path: Path | None) -> tuple[list[Path], Path | None, PipelineCon
         manual_title=str(section.get("manual_title", "")),
         manual_highlights=tuple(item for item in manual if isinstance(item, dict)),
         transcript_command=tuple(str(item) for item in transcript_command),
+        auto_editor=parse_auto_editor_config(data),
     )
     working_dirs = [Path(item) for item in data.get("working_dirs", [])]
     output_value = section.get("output_dir")
@@ -748,6 +760,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             (
                 candidate
                 for candidate in (
+                    _REPO_ROOT / "config.json",
                     script_dir / "config.local.json",
                     script_dir / "config.json",
                 )
