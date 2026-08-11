@@ -23,11 +23,14 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import audio_sync
-import dual_source
-import resolve_session
+import audio_sync  # noqa: E402
+import dual_source  # noqa: E402
+import resolve_session  # noqa: E402
+from auto_editor_config import load_auto_editor_config  # noqa: E402
 
 TEMPLATE_NAME = "テンプレート.drp"
 CUT_LIST_NAME = "_auto_editor_cuts.json"
@@ -119,14 +122,15 @@ def run_auto_editor_cut_list(camera_path, output_path):
     """
     output_path = Path(output_path)
     clear_previous_cut_lists(output_path)
+    auto_editor = load_auto_editor_config()
 
     for export_format, suffix in EXPORT_FORMATS:
         requested = output_path.with_suffix(suffix)
         command = [
             "auto-editor",
             str(camera_path),
-            "--margin", dual_source.SILENCE_MARGIN,
-            "--edit", dual_source.SILENCE_EDIT,
+            "--margin", auto_editor.margin,
+            "--edit", auto_editor.edit_expression,
             "--export", export_format,
             "--output", str(requested),
             "--no-open",

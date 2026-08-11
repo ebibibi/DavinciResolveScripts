@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from auto_editor_config import AutoEditorConfig
+
 SCRIPT_DIR = Path(__file__).parents[1] / "有償版用スクリプト"
 sys.path.insert(0, str(SCRIPT_DIR))
 SPEC = importlib.util.spec_from_file_location(
@@ -248,6 +250,15 @@ def test_the_measured_placement_is_applied_to_every_clip(pair, stub_pipeline):
 def test_the_cut_list_is_written_next_to_the_recording(pair, tmp_path, monkeypatch):
     recorded = {}
 
+    monkeypatch.setattr(
+        EDITOR,
+        "load_auto_editor_config",
+        lambda: AutoEditorConfig(
+            threshold_percent=2.5,
+            margin_seconds=0.45,
+        ),
+    )
+
     def fake_run(command, capture_output, text, check):
         recorded["command"] = command
         Path(command[command.index("--output") + 1]).write_text(
@@ -267,8 +278,11 @@ def test_the_cut_list_is_written_next_to_the_recording(pair, tmp_path, monkeypat
 
     assert document["version"] == "3"
     assert (pair.folder / "_auto_editor_cuts.v3").exists()
-    assert EDITOR.dual_source.SILENCE_MARGIN in recorded["command"]
-    assert EDITOR.dual_source.SILENCE_EDIT in recorded["command"]
+    assert recorded["command"][recorded["command"].index("--margin") + 1] == "0.45sec"
+    assert (
+        recorded["command"][recorded["command"].index("--edit") + 1]
+        == "audio:threshold=2.5%"
+    )
 
 
 def test_the_entry_point_refuses_a_folder_that_is_not_a_pair(tmp_path, capsys):

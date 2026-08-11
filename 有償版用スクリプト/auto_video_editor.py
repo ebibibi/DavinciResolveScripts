@@ -18,6 +18,12 @@ import glob
 from datetime import datetime
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from auto_editor_config import load_auto_editor_config  # noqa: E402
+
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 
 def add_resolve_api_to_sys_path():
@@ -101,6 +107,7 @@ def run_auto_editor(working_dir):
     """auto-editorを実行"""
     print("auto-editorを実行中...")
     os.chdir(working_dir)
+    auto_editor = load_auto_editor_config()
 
     # 最新の .mkv / .mp4 ファイルを取得
     video_files = glob.glob("*.mkv") + glob.glob("*.mp4")
@@ -114,8 +121,8 @@ def run_auto_editor(working_dir):
     command = [
         "auto-editor",
         str(Path(working_dir) / latest_file),
-        "--margin", "0.3sec",
-        "--edit", "audio:threshold=1%",
+        "--margin", auto_editor.margin,
+        "--edit", auto_editor.edit_expression,
         "--export", "resolve"
     ]
 

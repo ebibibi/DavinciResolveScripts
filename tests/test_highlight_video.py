@@ -413,11 +413,18 @@ def test_render_cut_master_retries_empty_timeline_without_margin(
 
     monkeypatch.setattr(HIGHLIGHT_VIDEO, "_run", fake_run)
 
-    result = HIGHLIGHT_VIDEO.render_cut_master(source, tmp_path / "output")
+    result = HIGHLIGHT_VIDEO.render_cut_master(
+        source,
+        tmp_path / "output",
+        auto_editor=HIGHLIGHT_VIDEO.AutoEditorConfig(
+            threshold_percent=2.5,
+            margin_seconds=0.45,
+        ),
+    )
 
     assert result.read_bytes() == b"cut"
-    assert calls[0][calls[0].index("--edit") + 1] == "audio:threshold=3%"
-    assert calls[0][calls[0].index("--margin") + 1] == "0.2sec"
+    assert calls[0][calls[0].index("--edit") + 1] == "audio:threshold=2.5%"
+    assert calls[0][calls[0].index("--margin") + 1] == "0.45sec"
     assert calls[1][calls[1].index("--edit") + 1] == "none"
     assert "--margin" not in calls[1]
 
@@ -497,6 +504,10 @@ def test_load_config_and_latest_recording(tmp_path: Path) -> None:
         json.dumps(
             {
                 "working_dirs": [str(tmp_path)],
+                "auto_editor": {
+                    "threshold_percent": 2.5,
+                    "margin_seconds": 0.45,
+                },
                 "opening_highlight": {
                     "maximum_highlights": 2,
                     "manual_title": "title",
@@ -513,6 +524,8 @@ def test_load_config_and_latest_recording(tmp_path: Path) -> None:
     assert output is None
     assert config.maximum_highlights == 2
     assert config.transcript_command == ("wrapper", "{input}")
+    assert config.auto_editor.edit_expression == "audio:threshold=2.5%"
+    assert config.auto_editor.margin == "0.45sec"
     assert HIGHLIGHT_VIDEO.latest_recording(paths) == newest
 
 

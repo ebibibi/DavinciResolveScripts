@@ -14,6 +14,12 @@ import sys
 import subprocess
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from auto_editor_config import load_auto_editor_config  # noqa: E402
+
 print("DaVinci Resolve自動動画編集スクリプト（無料版）開始")
 
 ## auto-editorの実行
@@ -28,13 +34,14 @@ if not mkv_files:
     exit(1)
 
 latest_file = max(mkv_files, key=os.path.getmtime)
+auto_editor = load_auto_editor_config()
 
 # auto-editor のコマンドライン引数を組み立てる
 command = [
     "auto-editor",
     str(Path(working_dir) / latest_file),
-    "--margin", "0.2sec",
-    "--edit", "audio:threshold=1%",
+    "--margin", auto_editor.margin,
+    "--edit", auto_editor.edit_expression,
     "--export", "resolve"
 ]
 
@@ -309,4 +316,3 @@ except Exception as e:
 
 
 print("全ての処理が完了しました。")
-
