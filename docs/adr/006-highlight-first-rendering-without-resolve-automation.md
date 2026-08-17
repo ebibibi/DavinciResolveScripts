@@ -10,7 +10,7 @@ tags: [auto-editor, highlights, ffmpeg, ass, whisper, youtube, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes: ADR-005
-superseded_by: ADR-011
+superseded_by: ADR-015
 ---
 
 # Prepend copied highlights and a takeaway title without Resolve automation

@@ -1,6 +1,6 @@
 ---
 type: adr
-id: ADR-011
+id: ADR-015
 title: Edit the whole video in code instead of an NLE
 decision: The advanced route builds one edit decision list from the transcript - highlights, chapter cards, emphasis telops, burned captions and generated sound effects - and renders it with a single FFmpeg command, with DaVinci Resolve out of the loop entirely.
 status: accepted

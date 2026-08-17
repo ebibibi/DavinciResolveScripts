@@ -21,11 +21,12 @@ def test_familiar_launcher_routes_only_to_stable_resolve_editor() -> None:
     assert "highlight_video.py" not in launcher.read_text(encoding="utf-8")
 
 
-def test_advanced_launcher_routes_only_to_highlight_editor() -> None:
+def test_advanced_launcher_routes_only_to_the_ffmpeg_editor() -> None:
+    """ADR-015 以降、advanced ルートの入口は advanced_video_editor.py になる。"""
     launcher = SCRIPT_DIR / "run_advanced_auto_video_editor.ps1"
     content = launcher.read_text(encoding="utf-8")
 
-    assert '$Arguments = @("highlight_video.py")' in content
+    assert '$Arguments = @("advanced_video_editor.py")' in content
     assert 'python "auto_video_editor.py"' not in content
 
 
