@@ -19,7 +19,7 @@ foreach ($Command in $RequiredCommands) {
     }
 }
 
-$Arguments = @("highlight_video.py")
+$Arguments = @("advanced_video_editor.py")
 $LocalConfig = Join-Path $ScriptDir "config.local.json"
 $LegacyConfig = Join-Path $ScriptDir "config.json"
 if (Test-Path $LocalConfig) {
@@ -30,11 +30,11 @@ elseif (Test-Path $LegacyConfig) {
 }
 
 Write-Host "Starting advanced highlight-first editing..." -ForegroundColor Cyan
-Write-Host "Workflow: silence removal + opening highlights + takeaway title"
+Write-Host "Workflow: silence removal + opening highlights + takeaway title + chapters + telops + captions + sound effects"
 & python @Arguments
 if ($LASTEXITCODE -ne 0) {
     throw "Advanced editing failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "Done. The final MP4 and highlight_plan.json are in _highlight_output." -ForegroundColor Green
+Write-Host "Done. The final MP4 and edit_plan.json are in _edited_output." -ForegroundColor Green
 Read-Host "Press Enter to close"

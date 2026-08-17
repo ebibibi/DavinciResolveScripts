@@ -3,14 +3,14 @@ type: adr
 id: ADR-006
 title: Prepend copied highlights and a takeaway title without Resolve automation
 decision: Keep the proven auto-editor silence cut, copy one or more grounded highlights to the opening, render a large takeaway title with FFmpeg and ASS, and keep Resolve API editing out of the advanced workflow.
-status: accepted
+status: superseded
 date: 2026-07-20
 deciders: [Masahiko Ebisu, Codex]
 tags: [auto-editor, highlights, ffmpeg, ass, whisper, youtube, video-editing]
 scope: context
 context: DavinciResolveScripts
 supersedes: ADR-005
-superseded_by:
+superseded_by: ADR-015
 ---
 
 # Prepend copied highlights and a takeaway title without Resolve automation
