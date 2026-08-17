@@ -27,7 +27,7 @@ DaVinci Resolve process:
 3. Find the newest OBS recording.
 4. Use `auto-editor` to remove silence with the values from
    `有償版用スクリプト/config.json`
-   (default: `audio:threshold=1%` and `--margin 0.3sec`).
+   (default: `audio:threshold=3%` and `--margin 0.3sec`).
 5. Import the generated timeline and combine it with the template timeline and
    ending clip.
 
@@ -153,7 +153,7 @@ stable, dual-source, advanced, and free workflows:
 ```json
 {
   "auto_editor": {
-    "threshold_percent": 1,
+    "threshold_percent": 3,
     "margin_seconds": 0.3
   }
 }
@@ -163,6 +163,11 @@ stable, dual-source, advanced, and free workflows:
 `margin_seconds` must be 0 or greater. If the file does not exist, the shown
 values are used as defaults. Invalid values stop the run with a clear error
 instead of silently using different settings.
+
+An environment that still holds `"threshold_percent": 1` from an earlier release
+should raise it: the camera microphone the dual-source route analyses never
+falls below 1%, so that value keeps 99.7% of a talk and removes no silence at
+all. See [ADR-013](docs/adr/013-cut-silence-at-3-percent-for-a-hot-camera-microphone.md).
 
 ## Opening-highlight configuration
 

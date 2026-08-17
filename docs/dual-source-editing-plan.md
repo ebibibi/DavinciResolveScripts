@@ -29,7 +29,7 @@ stable single source editor is untouched. See
    the slide file, plus the correlation coefficient at that point. A weak match
    stops the run instead of silently assuming zero.
 3. **Find the silence.** Run `auto-editor` once, on the camera file that carries
-   the microphone, with the proven `audio:threshold=1%` and `--margin 0.3sec`.
+   the microphone, with the proven `audio:threshold=3%` and `--margin 0.3sec`.
    The export that prints a v3 timeline is named `v3` on current versions and
    `json` on older ones, so both are tried in that order. Current auto-editor
    also rewrites the `--output` extension to `.v3` regardless of what was asked
@@ -42,10 +42,12 @@ stable single source editor is untouched. See
    finished timeline.
 4. **Build both tracks.** Each surviving segment becomes three
    `AppendToTimeline` entries sharing one record frame: the slide clip on V1,
-   the camera clip on V2, and the camera audio on A1. Because both tracks are
-   cut at the same timeline frames, the two views cannot drift. Record frames
-   are accumulated from the placed durations, so trimming one segment shifts
-   what follows instead of leaving a hole.
+   the camera clip on V2, and the camera audio on A1. One length in timeline
+   frames drives all three, divided by each track's conform factor, so the two
+   views cannot drift and no hole opens between clips. Record frames are
+   accumulated from the placed durations, so trimming one segment shifts what
+   follows instead of leaving a hole. Every imported clip has its start timecode
+   zeroed first — see ADR-012, without which the camera lands 64 seconds away.
 5. **Size the camera.** `SetProperty` applies the measured placement below to
    every clip on both tracks.
 6. **Wrap it.** The template's opening clip decides where the body starts, and
@@ -69,6 +71,20 @@ the frame rate Resolve reports for that clip. Mixing them by frame number would
 shift the edit silently, which is exactly the kind of error that only shows up
 after the render.
 
+Two corrections come out of that, both measured against Resolve rather than
+derived from the documentation:
+
+- **Conform factor.** Resolve gives one frame of the 30 fps capture two timeline
+  frames and one frame of the 59.94 fps camera one. Each segment's length is
+  therefore decided once in timeline frames and divided by that factor, instead
+  of being rounded separately per track — otherwise the two roundings disagree on
+  about one segment in six and leave a one frame hole.
+- **Placement scale.** `startFrame` is read through the same conform, so a 59.94
+  fps camera lands 0.1% deeper into the media than asked: 119 frames two thirds
+  of the way through a 43 minute talk. The request is scaled by the clip's
+  conformed rate over the timeline's, which cancels it exactly. The 30 fps
+  capture conforms to 60 on the nose, so its scale is 1.
+
 ## Measured placement
 
 Taken from the manually edited AZ-900 project, whose timeline is 1920x1080. The
@@ -88,10 +104,12 @@ first thing to re-check if the camera moves.
 
 ## When the two recordings do not cover the same moments
 
-- **The camera started first**, which is normal: the opening frames of the talk
-  exist only on the camera. Up to five seconds of that head is trimmed off both
-  tracks together. More than that stops the run, because it means the two files
-  are probably not the same session.
+- **The camera started first**, which is normal: it is started by hand while the
+  slide capture is started by OBS, so the opening of the talk can exist only on
+  the camera — 17 seconds of it in the AZ-900 recordings of 2026-08-02. That head
+  is trimmed off both tracks together. Only a head longer than five minutes stops
+  the run; the real guard against two unrelated files is the sync confidence, and
+  a limit tight enough to second-guess it just refuses valid sessions.
 - **The slide capture stopped first**: segments past its end are dropped rather
   than placed, and the count is logged.
 
