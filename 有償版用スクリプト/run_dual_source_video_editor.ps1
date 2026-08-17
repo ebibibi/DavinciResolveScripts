@@ -7,6 +7,11 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
+# マージされた修正が編集機に届いていない事故を止めるため、実行のたびに最新版へ
+# 揃える。更新できなくても止めず、どの版で走っているかを必ず表示する。
+. (Join-Path $ScriptDir "update_repository.ps1")
+Update-Repository -RepositoryRoot (Split-Path -Parent $ScriptDir) | Out-Null
+
 $RequiredCommands = @("python", "auto-editor", "ffmpeg")
 foreach ($Command in $RequiredCommands) {
     if (-not (Get-Command $Command -ErrorAction SilentlyContinue)) {

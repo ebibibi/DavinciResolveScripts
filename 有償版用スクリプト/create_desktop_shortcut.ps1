@@ -4,6 +4,11 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# 古い版のランチャー一覧でショートカットを作らないよう、先に最新版へ揃える。
+. (Join-Path $ScriptDir "update_repository.ps1")
+Update-Repository -RepositoryRoot (Split-Path -Parent $ScriptDir) | Out-Null
+
 $Launchers = @(
     @{
         File = "run_auto_video_editor.ps1"

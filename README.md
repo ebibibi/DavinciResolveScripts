@@ -144,6 +144,25 @@ You can also pass a recording explicitly:
 python "有償版用スクリプト/highlight_video.py" "C:\Videos\recording.mkv"
 ```
 
+## Staying up to date
+
+Every `.ps1` entry point runs `git pull --ff-only` on itself before it starts and
+prints the commit it is about to run with. A merged fix that never reaches the
+editing machine is not a fix: PR #29 sat unmerged for two weeks and the working
+copy was never pulled, so a known-broken placement kept shipping.
+
+The update never stops a run — an edit with a slightly old script beats no edit
+at all — but it always says what happened, because "it did not update" and "it
+updated and is still wrong" send the next hour into different code. It declines
+to update, and says so, when the checkout is on another branch, has uncommitted
+changes to tracked files, or cannot reach the remote. It never discards work:
+there is no `reset --hard` anywhere in it, and `config.json` is ignored by Git,
+so environment-local tuning is never touched.
+
+Changes to a launcher itself take effect on the following run, because
+PowerShell has already read the file it is executing. The Python it starts
+afterwards is always the freshly pulled version.
+
 ## Silence-cut configuration
 
 `有償版用スクリプト/config.json` is ignored by Git, so each recording
