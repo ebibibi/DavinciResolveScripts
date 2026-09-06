@@ -19,6 +19,15 @@ foreach ($Command in $RequiredCommands) {
     }
 }
 
+# Make the preset collection available before Resolve starts. A title-library
+# installation failure should not discard or prevent an otherwise valid edit.
+try {
+    & python (Join-Path $ScriptDir "install_title_presets.py")
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Title library installation failed; editing will continue." }
+} catch {
+    Write-Warning "Title library installation failed: $_"
+}
+
 Write-Host "Starting stable editing..." -ForegroundColor Cyan
 Write-Host "Workflow: auto-editor silence removal + Resolve template timeline"
 & python "auto_video_editor.py"

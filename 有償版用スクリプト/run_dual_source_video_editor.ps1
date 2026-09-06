@@ -22,6 +22,15 @@ foreach ($Command in $RequiredCommands) {
 $Arguments = @("dual_source_video_editor.py")
 $Arguments += $args
 
+# Make the preset collection available before Resolve starts. A title-library
+# installation failure should not discard or prevent an otherwise valid edit.
+try {
+    & python (Join-Path $ScriptDir "install_title_presets.py")
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Title library installation failed; editing will continue." }
+} catch {
+    Write-Warning "Title library installation failed: $_"
+}
+
 Write-Host "Starting dual source editing..." -ForegroundColor Cyan
 Write-Host "Workflow: audio sync + silence removal on both tracks + camera placement"
 & python @Arguments

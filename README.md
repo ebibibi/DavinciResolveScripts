@@ -17,6 +17,14 @@ The familiar `run_auto_video_editor.ps1` name deliberately remains attached to
 the stable workflow. New features must not silently change its output — each
 route names its own Python entry point and nothing else.
 
+## Reusable Japanese titles
+
+The Studio project template now contains **12 EBI title presets** for captions,
+emphasis, warnings, chapter cards, names, quotes and steps. Stable and dual-source
+launchers also install them in the current user's Fusion Titles library, while
+preserving locally customized files. Choose a title and edit its text in the
+Inspector. See the [catalog, installation guide and validation status](title_presets/README.md).
+
 ## Stable workflow
 
 The stable launcher runs `auto_video_editor.py` and keeps the established
