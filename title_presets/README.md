@@ -70,6 +70,15 @@ Existing projects are not rewritten. They can use the newly installed Effects
 Library titles. The Advanced FFmpeg editing route and the separate free-version
 DRP are not changed by this library.
 
+## If an existing title says “No frame available for MediaOut1”
+
+The initial DRP used a MediaOut port reference that did not match the macro's
+published output. The corrected DRP applies to new projects. To repair existing
+clips without rebuilding the edit, open the affected timeline and run
+`有償版用スクリプト/repair_title_outputs.ps1` from the updated repository.
+It exports a project backup before reconnecting missing outputs, and preserves
+text and clip timing. See the [diagnosis and validation status](../docs/kb/ebi-title-mediaout-no-frame.md).
+
 ## Typography and placement
 
 The default family/style is `HGPSoeiKakugothicUB / Regular`, matching the original

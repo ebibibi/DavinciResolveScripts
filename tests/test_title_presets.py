@@ -106,8 +106,7 @@ def test_all_fusion_graphs_parse_and_have_connected_outputs():
         comp = lua_graph(composition_tools(preset).rstrip("\0"))
         assert comp["MediaOut1"]["Inputs"]["Input"]["SourceOp"] == "Template"
         output = comp["MediaOut1"]["Inputs"]["Input"]["Source"]
-        assert output == "Output"
-        assert comp["Template"]["Outputs"]["MainOutput1"] is not None
+        assert comp["Template"]["Outputs"][output] is not None
         # Reading two assets must produce independent node objects.
         other = lua_graph(setting_text(preset))
         nodes["MainText"]["Inputs"]["StyledText"]["Value"] = "changed"
@@ -166,3 +165,13 @@ def test_installer_cli_and_repeat_install(tmp_path):
     assert "12 installed/updated" in first.stdout
     assert "0 installed/updated" in second.stdout
     assert len(list((tmp_path / "Titles/EBI").glob("*.setting"))) == 12
+
+
+def test_shipped_project_mediaout_references_a_declared_macro_output():
+    with zipfile.ZipFile(ROOT / "有償版用スクリプト/テンプレート.drp") as archive:
+        xml = archive.read("MediaPool/Master/MpFolder.xml").decode()
+    for preset in load_presets():
+        graph = lua_graph(extract_composition(xml, preset["name"]))
+        connection = graph["MediaOut1"]["Inputs"]["Input"]
+        source = graph[connection["SourceOp"]]
+        assert source["Outputs"][connection["Source"]] is not None
