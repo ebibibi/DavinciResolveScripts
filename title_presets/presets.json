@@ -15,7 +15,10 @@
     ],
     "outline": true,
     "usage": "短い要点。1〜2行。",
-    "name": "EBI_01_通常_白文字"
+    "name": "01_通常",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "02_subtitle",
@@ -44,7 +47,10 @@
     ],
     "opacity": 0.78,
     "usage": "明るい映像でも読みやすい字幕。",
-    "name": "EBI_02_字幕_半透明帯"
+    "name": "02_字幕",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "03_emphasis",
@@ -62,7 +68,10 @@
     ],
     "outline": true,
     "usage": "重要語や結論を短く大きく。",
-    "name": "EBI_03_強調_イエロー"
+    "name": "03_強調",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "04_warning",
@@ -90,7 +99,10 @@
       0.055
     ],
     "usage": "失敗しやすい操作や警告。",
-    "name": "EBI_04_注意_レッド"
+    "name": "04_注意",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "05_success",
@@ -118,7 +130,10 @@
       0.23
     ],
     "usage": "成功・解決・チェック完了。",
-    "name": "EBI_05_完了_グリーン"
+    "name": "05_完了",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "06_topic",
@@ -146,7 +161,10 @@
       0.25
     ],
     "usage": "章や話題を左上に常時表示。",
-    "name": "EBI_06_見出し_左上"
+    "name": "06_見出し",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "07_chapter",
@@ -185,7 +203,10 @@
       1
     ],
     "usage": "話題の切り替え。本文と補足を別々に編集。",
-    "name": "EBI_07_章タイトル_中央"
+    "name": "07_章タイトル",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "08_name",
@@ -224,7 +245,10 @@
       1
     ],
     "usage": "話し手の名前と所属。",
-    "name": "EBI_08_名前紹介_左下"
+    "name": "08_名前",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "09_note",
@@ -253,7 +277,10 @@
     ],
     "opacity": 0.78,
     "usage": "条件・注記。長文は2行用字幕へ。",
-    "name": "EBI_09_補足_小さめ"
+    "name": "09_補足",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "10_quote",
@@ -293,7 +320,10 @@
       0.43
     ],
     "usage": "引用と出典を分けて表示。",
-    "name": "EBI_10_引用_ホワイトカード"
+    "name": "10_引用",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "11_step",
@@ -327,7 +357,10 @@
       0.185
     ],
     "usage": "手順番号と操作内容。",
-    "name": "EBI_11_手順_ブルー"
+    "name": "11_手順",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
   },
   {
     "id": "12_question",
@@ -355,6 +388,1167 @@
       0.105
     ],
     "usage": "視聴者への問いかけ・疑問の提示。",
-    "name": "EBI_12_問いかけ_中央"
+    "name": "12_問いかけ",
+    "font": "Meiryo",
+    "style": "Bold",
+    "language": "JP"
+  },
+  {
+    "id": "13_jp_text_meiryo",
+    "name": "13_メイリオ_文字のみ",
+    "label": "JP・文字のみ・Meiryo",
+    "language": "JP",
+    "font": "Meiryo",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Meiryo / 文字のみ",
+    "outline": true
+  },
+  {
+    "id": "14_jp_black_meiryo",
+    "name": "14_メイリオ_黒帯",
+    "label": "JP・黒帯・Meiryo",
+    "language": "JP",
+    "font": "Meiryo",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Meiryo / 黒帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "15_jp_blue_meiryo",
+    "name": "15_メイリオ_青帯",
+    "label": "JP・青帯・Meiryo",
+    "language": "JP",
+    "font": "Meiryo",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Meiryo / 青帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.025,
+      0.15,
+      0.38
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "16_jp_green_meiryo",
+    "name": "16_メイリオ_緑帯",
+    "label": "JP・緑帯・Meiryo",
+    "language": "JP",
+    "font": "Meiryo",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Meiryo / 緑帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.015,
+      0.29,
+      0.17
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "17_jp_purple_meiryo",
+    "name": "17_メイリオ_紫帯",
+    "label": "JP・紫帯・Meiryo",
+    "language": "JP",
+    "font": "Meiryo",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Meiryo / 紫帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.27,
+      0.055,
+      0.4
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "18_jp_screen_meiryo",
+    "name": "18_メイリオ_黒全面",
+    "label": "JP・黒全面・Meiryo",
+    "language": "JP",
+    "font": "Meiryo",
+    "style": "Bold",
+    "text": "次の章へ",
+    "size": 0.07,
+    "center": [
+      0.5,
+      0.54
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Meiryo / 黒全面",
+    "box": [
+      0.5,
+      0.5,
+      1,
+      1
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1,
+    "corner_radius": 0,
+    "subtitle": "ここから、新しい一歩",
+    "subcenter": [
+      0.5,
+      0.42
+    ],
+    "subsize": 0.032,
+    "subcolor": [
+      0.75,
+      0.8,
+      0.88
+    ]
+  },
+  {
+    "id": "19_jp_text_yu_gothic",
+    "name": "19_游ゴシック_文字のみ",
+    "label": "JP・文字のみ・Yu Gothic",
+    "language": "JP",
+    "font": "Yu Gothic",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Gothic / 文字のみ",
+    "outline": true
+  },
+  {
+    "id": "20_jp_black_yu_gothic",
+    "name": "20_游ゴシック_黒帯",
+    "label": "JP・黒帯・Yu Gothic",
+    "language": "JP",
+    "font": "Yu Gothic",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Gothic / 黒帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "21_jp_blue_yu_gothic",
+    "name": "21_游ゴシック_青帯",
+    "label": "JP・青帯・Yu Gothic",
+    "language": "JP",
+    "font": "Yu Gothic",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Gothic / 青帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.025,
+      0.15,
+      0.38
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "22_jp_green_yu_gothic",
+    "name": "22_游ゴシック_緑帯",
+    "label": "JP・緑帯・Yu Gothic",
+    "language": "JP",
+    "font": "Yu Gothic",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Gothic / 緑帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.015,
+      0.29,
+      0.17
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "23_jp_purple_yu_gothic",
+    "name": "23_游ゴシック_紫帯",
+    "label": "JP・紫帯・Yu Gothic",
+    "language": "JP",
+    "font": "Yu Gothic",
+    "style": "Bold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Gothic / 紫帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.27,
+      0.055,
+      0.4
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "24_jp_screen_yu_gothic",
+    "name": "24_游ゴシック_黒全面",
+    "label": "JP・黒全面・Yu Gothic",
+    "language": "JP",
+    "font": "Yu Gothic",
+    "style": "Bold",
+    "text": "次の章へ",
+    "size": 0.07,
+    "center": [
+      0.5,
+      0.54
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Gothic / 黒全面",
+    "box": [
+      0.5,
+      0.5,
+      1,
+      1
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1,
+    "corner_radius": 0,
+    "subtitle": "ここから、新しい一歩",
+    "subcenter": [
+      0.5,
+      0.42
+    ],
+    "subsize": 0.032,
+    "subcolor": [
+      0.75,
+      0.8,
+      0.88
+    ]
+  },
+  {
+    "id": "25_jp_text_yu_mincho",
+    "name": "25_游明朝_文字のみ",
+    "label": "JP・文字のみ・Yu Mincho",
+    "language": "JP",
+    "font": "Yu Mincho",
+    "style": "Demibold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Mincho / 文字のみ",
+    "outline": true
+  },
+  {
+    "id": "26_jp_black_yu_mincho",
+    "name": "26_游明朝_黒帯",
+    "label": "JP・黒帯・Yu Mincho",
+    "language": "JP",
+    "font": "Yu Mincho",
+    "style": "Demibold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Mincho / 黒帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "27_jp_blue_yu_mincho",
+    "name": "27_游明朝_青帯",
+    "label": "JP・青帯・Yu Mincho",
+    "language": "JP",
+    "font": "Yu Mincho",
+    "style": "Demibold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Mincho / 青帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.025,
+      0.15,
+      0.38
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "28_jp_green_yu_mincho",
+    "name": "28_游明朝_緑帯",
+    "label": "JP・緑帯・Yu Mincho",
+    "language": "JP",
+    "font": "Yu Mincho",
+    "style": "Demibold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Mincho / 緑帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.015,
+      0.29,
+      0.17
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "29_jp_purple_yu_mincho",
+    "name": "29_游明朝_紫帯",
+    "label": "JP・紫帯・Yu Mincho",
+    "language": "JP",
+    "font": "Yu Mincho",
+    "style": "Demibold",
+    "text": "ここに字幕を入力",
+    "size": 0.046,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Mincho / 紫帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.27,
+      0.055,
+      0.4
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "30_jp_screen_yu_mincho",
+    "name": "30_游明朝_黒全面",
+    "label": "JP・黒全面・Yu Mincho",
+    "language": "JP",
+    "font": "Yu Mincho",
+    "style": "Demibold",
+    "text": "次の章へ",
+    "size": 0.07,
+    "center": [
+      0.5,
+      0.54
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "JP / Yu Mincho / 黒全面",
+    "box": [
+      0.5,
+      0.5,
+      1,
+      1
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1,
+    "corner_radius": 0,
+    "subtitle": "ここから、新しい一歩",
+    "subcenter": [
+      0.5,
+      0.42
+    ],
+    "subsize": 0.032,
+    "subcolor": [
+      0.75,
+      0.8,
+      0.88
+    ]
+  },
+  {
+    "id": "31_en_text_arial",
+    "name": "31_Arial_文字のみ",
+    "label": "EN・文字のみ・Arial",
+    "language": "EN",
+    "font": "Arial",
+    "style": "Bold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Arial / 文字のみ",
+    "outline": true
+  },
+  {
+    "id": "32_en_black_arial",
+    "name": "32_Arial_黒帯",
+    "label": "EN・黒帯・Arial",
+    "language": "EN",
+    "font": "Arial",
+    "style": "Bold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Arial / 黒帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "33_en_blue_arial",
+    "name": "33_Arial_青帯",
+    "label": "EN・青帯・Arial",
+    "language": "EN",
+    "font": "Arial",
+    "style": "Bold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Arial / 青帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.025,
+      0.15,
+      0.38
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "34_en_green_arial",
+    "name": "34_Arial_緑帯",
+    "label": "EN・緑帯・Arial",
+    "language": "EN",
+    "font": "Arial",
+    "style": "Bold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Arial / 緑帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.015,
+      0.29,
+      0.17
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "35_en_purple_arial",
+    "name": "35_Arial_紫帯",
+    "label": "EN・紫帯・Arial",
+    "language": "EN",
+    "font": "Arial",
+    "style": "Bold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Arial / 紫帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.27,
+      0.055,
+      0.4
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "36_en_screen_arial",
+    "name": "36_Arial_黒全面",
+    "label": "EN・黒全面・Arial",
+    "language": "EN",
+    "font": "Arial",
+    "style": "Bold",
+    "text": "THE NEXT CHAPTER",
+    "size": 0.07,
+    "center": [
+      0.5,
+      0.54
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Arial / 黒全面",
+    "box": [
+      0.5,
+      0.5,
+      1,
+      1
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1,
+    "corner_radius": 0,
+    "subtitle": "A new step begins here",
+    "subcenter": [
+      0.5,
+      0.42
+    ],
+    "subsize": 0.032,
+    "subcolor": [
+      0.75,
+      0.8,
+      0.88
+    ]
+  },
+  {
+    "id": "37_en_text_segoe_ui",
+    "name": "37_SegoeUI_文字のみ",
+    "label": "EN・文字のみ・Segoe UI",
+    "language": "EN",
+    "font": "Segoe UI",
+    "style": "Semibold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Segoe UI / 文字のみ",
+    "outline": true
+  },
+  {
+    "id": "38_en_black_segoe_ui",
+    "name": "38_SegoeUI_黒帯",
+    "label": "EN・黒帯・Segoe UI",
+    "language": "EN",
+    "font": "Segoe UI",
+    "style": "Semibold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Segoe UI / 黒帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "39_en_blue_segoe_ui",
+    "name": "39_SegoeUI_青帯",
+    "label": "EN・青帯・Segoe UI",
+    "language": "EN",
+    "font": "Segoe UI",
+    "style": "Semibold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Segoe UI / 青帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.025,
+      0.15,
+      0.38
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "40_en_green_segoe_ui",
+    "name": "40_SegoeUI_緑帯",
+    "label": "EN・緑帯・Segoe UI",
+    "language": "EN",
+    "font": "Segoe UI",
+    "style": "Semibold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Segoe UI / 緑帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.015,
+      0.29,
+      0.17
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "41_en_purple_segoe_ui",
+    "name": "41_SegoeUI_紫帯",
+    "label": "EN・紫帯・Segoe UI",
+    "language": "EN",
+    "font": "Segoe UI",
+    "style": "Semibold",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Segoe UI / 紫帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.27,
+      0.055,
+      0.4
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "42_en_screen_segoe_ui",
+    "name": "42_SegoeUI_黒全面",
+    "label": "EN・黒全面・Segoe UI",
+    "language": "EN",
+    "font": "Segoe UI",
+    "style": "Semibold",
+    "text": "THE NEXT CHAPTER",
+    "size": 0.07,
+    "center": [
+      0.5,
+      0.54
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Segoe UI / 黒全面",
+    "box": [
+      0.5,
+      0.5,
+      1,
+      1
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1,
+    "corner_radius": 0,
+    "subtitle": "A new step begins here",
+    "subcenter": [
+      0.5,
+      0.42
+    ],
+    "subsize": 0.032,
+    "subcolor": [
+      0.75,
+      0.8,
+      0.88
+    ]
+  },
+  {
+    "id": "43_en_text_georgia",
+    "name": "43_Georgia_文字のみ",
+    "label": "EN・文字のみ・Georgia",
+    "language": "EN",
+    "font": "Georgia",
+    "style": "Regular",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Georgia / 文字のみ",
+    "outline": true
+  },
+  {
+    "id": "44_en_black_georgia",
+    "name": "44_Georgia_黒帯",
+    "label": "EN・黒帯・Georgia",
+    "language": "EN",
+    "font": "Georgia",
+    "style": "Regular",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Georgia / 黒帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "45_en_blue_georgia",
+    "name": "45_Georgia_青帯",
+    "label": "EN・青帯・Georgia",
+    "language": "EN",
+    "font": "Georgia",
+    "style": "Regular",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Georgia / 青帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.025,
+      0.15,
+      0.38
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "46_en_green_georgia",
+    "name": "46_Georgia_緑帯",
+    "label": "EN・緑帯・Georgia",
+    "language": "EN",
+    "font": "Georgia",
+    "style": "Regular",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Georgia / 緑帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.015,
+      0.29,
+      0.17
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "47_en_purple_georgia",
+    "name": "47_Georgia_紫帯",
+    "label": "EN・紫帯・Georgia",
+    "language": "EN",
+    "font": "Georgia",
+    "style": "Regular",
+    "text": "Your message goes here",
+    "size": 0.052,
+    "center": [
+      0.5,
+      0.14
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Georgia / 紫帯",
+    "box": [
+      0.5,
+      0.14,
+      0.9,
+      0.16
+    ],
+    "background": [
+      0.27,
+      0.055,
+      0.4
+    ],
+    "opacity": 1
+  },
+  {
+    "id": "48_en_screen_georgia",
+    "name": "48_Georgia_黒全面",
+    "label": "EN・黒全面・Georgia",
+    "language": "EN",
+    "font": "Georgia",
+    "style": "Regular",
+    "text": "THE NEXT CHAPTER",
+    "size": 0.07,
+    "center": [
+      0.5,
+      0.54
+    ],
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "usage": "EN / Georgia / 黒全面",
+    "box": [
+      0.5,
+      0.5,
+      1,
+      1
+    ],
+    "background": [
+      0,
+      0,
+      0
+    ],
+    "opacity": 1,
+    "corner_radius": 0,
+    "subtitle": "A new step begins here",
+    "subcenter": [
+      0.5,
+      0.42
+    ],
+    "subsize": 0.032,
+    "subcolor": [
+      0.75,
+      0.8,
+      0.88
+    ]
   }
 ]

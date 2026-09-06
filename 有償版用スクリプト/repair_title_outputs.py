@@ -14,8 +14,6 @@ def disconnected_titles(timeline: Any) -> list[tuple[str, Any, Any, Any]]:
     candidates = []
     for track in range(1, timeline.GetTrackCount("video") + 1):
         for item in timeline.GetItemListInTrack("video", track) or []:
-            if not item.GetName().startswith("EBI_"):
-                continue
             comp = item.GetFusionCompByIndex(1)
             if comp is None:
                 continue
@@ -25,11 +23,14 @@ def disconnected_titles(timeline: Any) -> list[tuple[str, Any, Any, Any]]:
                 continue
             if template.GetAttrs().get("TOOLS_RegID") != "MacroOperator":
                 continue
-            # These published controls identify the bundled EBI graph.
-            if (
-                template.FindInput("StyledText") is None
-                or template.FindInput("Scale") is None
-            ):
+            # These published controls identify the bundled title graph;
+            # clip names are free-form, so never filter on them here.
+            # Tool.FindInput is not a Fusion API method (it resolves to None).
+            controls = {
+                control.GetAttrs().get("INPS_ID")
+                for control in (template.GetInputList() or {}).values()
+            }
+            if not {"StyledText", "Scale"}.issubset(controls):
                 continue
             destination = media_out.FindMainInput(1)
             output = template.FindMainOutput(1)

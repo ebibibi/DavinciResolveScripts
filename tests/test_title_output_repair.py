@@ -11,7 +11,7 @@ from repair_title_outputs import repair_current_timeline
 
 
 def setup_project(
-    backup, *, connected=False, name="EBI_01_通常_白文字", backup_ok=True
+    backup, *, connected=False, name="01_通常", bundled=True, backup_ok=True
 ):
     manager = MagicMock()
     project = manager.GetCurrentProject.return_value
@@ -23,6 +23,13 @@ def setup_project(
     comp = item.GetFusionCompByIndex.return_value
     template, media_out, output = MagicMock(), MagicMock(), MagicMock()
     template.GetAttrs.return_value = {"TOOLS_RegID": "MacroOperator"}
+    template.FindInput = None  # Matches Resolve 20; this method does not exist.
+    # Clip names are free-form, so the published controls are the only marker.
+    controls = ("StyledText", "Scale") if bundled else ("StyledText",)
+    template.GetInputList.return_value = {
+        index: MagicMock(GetAttrs=MagicMock(return_value={"INPS_ID": control}))
+        for index, control in enumerate(controls)
+    }
     template.FindMainOutput.return_value = output
     comp.FindTool.side_effect = lambda name: {
         "Template": template,
@@ -61,11 +68,14 @@ def test_repair_backs_up_and_reconnects_without_rebuilding(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "connected,name", [(True, "EBI_01_通常_白文字"), (False, "my footage")]
+    "connected,bundled,name",
+    [(True, True, "01_通常"), (False, False, "my footage")],
 )
-def test_other_or_connected_clips_are_untouched(tmp_path, connected, name):
+def test_other_or_connected_clips_are_untouched(tmp_path, connected, bundled, name):
     backup = tmp_path / "before.drp"
-    manager, _, _, media_out = setup_project(backup, connected=connected, name=name)
+    manager, _, _, media_out = setup_project(
+        backup, connected=connected, bundled=bundled, name=name
+    )
     assert repair_current_timeline(manager, backup) == 0
     media_out.ConnectInput.assert_not_called()
     manager.ExportProject.assert_not_called()

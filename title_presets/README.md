@@ -1,9 +1,12 @@
 # EBI title library
 
-Twelve original, editable Japanese title designs are included in the Studio
-workflow's `テンプレート.drp` Media Pool and as Fusion Titles under
-`Edit/Titles/EBI/`. Choose the `EBI_01_…` through `EBI_12_…` items by their
-Japanese purpose names. The existing `テロップ` and `main` timeline are preserved.
+Forty-eight original, editable title designs are included in the Studio
+workflow's `テンプレート.drp` Media Pool, in its `テロップ` bin, and as Fusion
+Titles under `Edit/Titles/EBI/`. Names are short and unprefixed: `01_通常`
+through `12_問いかけ` are the purpose-named designs, and `13_メイリオ_文字のみ`
+through `48_Georgia_黒全面` are the font/background matrix, named
+`番号_フォント_背景`. The existing `テロップ` generator and `main` timeline are
+preserved.
 
 ![Layout reference, not a Resolve render](catalog.svg)
 
@@ -16,20 +19,25 @@ Japanese purpose names. The existing `テロップ` and `main` timeline are pres
 | 05 | 完了 | Green completion banner |
 | 06 | 見出し | Persistent topic label at the upper left |
 | 07 | 章タイトル | Centered chapter card with a second line |
-| 08 | 名前紹介 | Lower third with a name and role |
+| 08 | 名前 | Lower third with a name and role |
 | 09 | 補足 | Small footnote over a translucent band |
 | 10 | 引用 | Light quote card with a source line |
 | 11 | 手順 | Step number and instruction |
 | 12 | 問いかけ | Centered question |
+
+Numbers 13–48 cover six backgrounds (`文字のみ`, `黒帯`, `青帯`, `緑帯`, `紫帯`,
+`黒全面`) for each of six fonts (`メイリオ`, `游ゴシック`, `游明朝`, `Arial`,
+`SegoeUI`, `Georgia`).
 
 ## Use in an editing project
 
 1. Run the usual **Stable** or **Dual Source** launcher. After its repository
    update, it installs the bundled `.setting` files in the current user's Fusion
    Titles folder, then runs the existing editor.
-2. In the generated project's Media Pool, search for `EBI_`. Drag a title onto a
-   video track above the footage: V2 or higher for the stable route, **V3 or
-   higher for dual source**, whose V2 already holds the camera.
+2. In the generated project's Media Pool, open the `テロップ` bin, or search by
+   name such as `字幕` or `青帯`. Drag a title onto a video track above the
+   footage: V2 or higher for the stable route, **V3 or higher for dual source**,
+   whose V2 already holds the camera.
 3. Select the title and edit **Text / 本文** in the Inspector. Titles with a
    secondary line also expose **Second line / 補足**. Size, font, style and
    whole-title position/scale are exposed; banner titles expose color, opacity,
@@ -62,7 +70,10 @@ Only bundled `.setting` files are installed, not scripts, fonts or plugins.
 
 The manifest tracks installed file hashes. Identical files are left alone;
 previously installed unmodified files can be upgraded. An existing file that
-was customized locally is preserved and reported. To preserve a customized
+was customized locally is preserved and reported. When a title is renamed in
+the catalog, the installer removes the unmodified file under its old name so
+the Effects Library does not show both; a customized file under an old name is
+kept, reported once, and then left alone. To preserve a customized
 look permanently, save it under your own new name. To deliberately restore a
 bundled look, move your customized copy elsewhere and run the installer again.
 
@@ -99,12 +110,22 @@ Do not place chapter cards over material that the audience needs to read.
 
 ## Build and validation
 
-`presets.json` is the source of truth. `tools/title_graph.py` builds the original
-Fusion macro graphs. `tools/build_title_presets.py` writes the `.setting` files
-and adds independent generator records to the Media Pool in the existing DRP.
-It does not alter any timeline/archive member outside the Master Media Pool.
+`presets.json` is the source of truth, and its `name` field is the displayed
+title name; `id` is the stable identity behind it, so renaming a title in
+`presets.json` updates the existing record instead of adding a duplicate.
+`tools/title_graph.py` builds the original Fusion macro graphs.
+`tools/build_title_presets.py` writes the `.setting` files and rebuilds the
+generator records in whichever Media Pool bin already holds them, so a bin
+created in Resolve keeps the collection. It does not alter any other
+timeline/archive member.
 The original generator is unchanged. New copies omit its Edit-page position
 override so that the Fusion layout owns positioning.
+
+Every generated composition header carries
+`CustomData = { TEMPLATE_ID = "<title name>" }`. The Edit page builds the
+Inspector's Title panel from that marker, so a generator without it renders
+correctly but exposes no text or font controls outside the Fusion page. See
+[the diagnosis](../docs/kb/edit-inspector-needs-template-id.md).
 
 The DRP adapter follows the bundled Resolve **20.2.1** archive's serialization.
 That file format is not a public scripting API. Keep the source DRP in Git and
@@ -125,7 +146,7 @@ The catalog is a **schematic layout reference**, not a screenshot or a render
 from Resolve. Font metrics, color management and antialiasing can differ.
 
 **Resolve GUI import/render validation is still required on the editing PC.**
-The authoring environment has no Resolve instance. Confirm that all 12 assets
+The authoring environment has no Resolve instance. Confirm that all 48 assets
 import, their Inspector fields appear, changing one copy does not affect other
 copies, and 2/5/15-second trims render correctly. Verify Japanese fonts and
 readability against actual screen/camera footage. Structural tests cannot prove

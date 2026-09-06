@@ -22,15 +22,16 @@ def node(name: str, kind: str, values: dict, links: dict | None = None) -> str:
 
 
 def text_node(
-    name: str, text: str, size: float, center: list, color: list, outline: bool = False
+    name: str, text: str, size: float, center: list, color: list, outline: bool = False,
+    font: str = "Meiryo", style: str = "Bold",
 ) -> str:
     values = {
         "Width": 1920,
         "Height": 1080,
         "UseFrameFormatSettings": 1,
         "StyledText": text,
-        "Font": "HGPSoeiKakugothicUB",
-        "Style": "Regular",
+        "Font": font,
+        "Style": style,
         "Size": size,
         "Center": center,
         "VerticalJustificationNew": 3,
@@ -60,6 +61,8 @@ def title_macro(preset: dict) -> str:
             preset["center"],
             preset["color"],
             preset.get("outline", False),
+            preset.get("font", "Meiryo"),
+            preset.get("style", "Bold"),
         )
     ]
     last = "MainText"
@@ -77,7 +80,7 @@ def title_macro(preset: dict) -> str:
                     "Center": [x, y],
                     "Width": width,
                     "Height": height,
-                    "CornerRadius": 0.025,
+                    "CornerRadius": preset.get("corner_radius", 0.025),
                 },
             ),
             node(
@@ -113,6 +116,8 @@ def title_macro(preset: dict) -> str:
                 preset["subsize"],
                 preset["subcenter"],
                 preset.get("subcolor", [1, 1, 1]),
+                font=preset.get("subfont", preset.get("font", "Meiryo")),
+                style=preset.get("substyle", preset.get("style", "Bold")),
             ),
             node(
                 "WithSubtitle",
@@ -193,7 +198,10 @@ def composition_tools(preset: dict) -> str:
             "MediaOut1",
             "MediaOut",
             {"Index": "0"},
-            {"Input": ("Template", "MainOutput1")},
+            # Resolve 20 serializes a macro connection using the underlying
+            # tool, even though FindMainOutput(1) exposes MainOutput1. Using
+            # the macro alias here silently imports with a disconnected input.
+            {"Input": ("Placement", "Output")},
         )
         + "\n}\0"
     )

@@ -28,7 +28,7 @@ def atomic_write(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def install_presets(source: Path, destination: Path) -> tuple[int, int]:
+def install_presets(source: Path, destination: Path) -> tuple[int, int, int]:
     files = sorted(source.glob("*.setting"))
     if not files:
         raise ValueError(f"No title presets found in {source}")
@@ -61,10 +61,26 @@ def install_presets(source: Path, destination: Path) -> tuple[int, int]:
         atomic_write(target, content)
         recorded[asset.name] = expected
         updated += 1
+    removed = 0
+    bundled = {asset.name for asset in files}
+    for name in sorted(set(previous) - bundled):
+        # A preset renamed in the catalog would otherwise linger in the Effects
+        # Library beside its replacement. Drop it from the manifest either way,
+        # so a customized leftover is reported once and then left alone.
+        stale = destination / name
+        del recorded[name]
+        if stale.is_symlink() or not stale.is_file():
+            continue
+        if digest(stale.read_bytes()) != previous[name]:
+            print(f"Preserved customized title no longer bundled: {name}")
+            skipped += 1
+            continue
+        stale.unlink()
+        removed += 1
     atomic_write(
         manifest, (json.dumps(recorded, ensure_ascii=False, indent=2) + "\n").encode()
     )
-    return updated, skipped
+    return updated, skipped, removed
 
 
 def default_destination() -> Path:
@@ -88,12 +104,13 @@ def main() -> None:
     )
     args = parser.parse_args()
     destination = args.destination or default_destination()
-    updated, skipped = install_presets(SOURCE, destination)
+    updated, skipped, removed = install_presets(SOURCE, destination)
     print(
-        f"EBI titles: {updated} installed/updated; {skipped} customized files preserved."
+        f"EBI titles: {updated} installed/updated; {skipped} customized files"
+        f" preserved; {removed} renamed files removed."
     )
     print(f"Titles folder: {destination}")
-    if updated:
+    if updated or removed:
         print(
             "If Resolve is already running, restart it when convenient to refresh the Effects Library."
         )

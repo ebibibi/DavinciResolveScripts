@@ -97,12 +97,19 @@ def qt_string(text: str) -> bytes:
     return struct.pack(">I", len(data)) + data
 
 
-def pack_composition(tools: str) -> str:
+def pack_composition(tools: str, template_id: str = "EBI Title") -> str:
     # Match the native Qt QVariant map and nested Fusion compressed stream.
+    # CustomData.TEMPLATE_ID is what makes the Edit page Inspector render a
+    # generator's published controls. Without it the Title tab shows only
+    # the enable toggle, so the text cannot be edited outside the Fusion
+    # page. Resolve checks that the marker exists, not what it says.
+    if chr(34) in template_id:
+        raise ValueError("TEMPLATE_ID cannot contain a quote")
     header = (
         b"Composition { CurrentTime = 0, RenderRange = { 0, 299 }, "
         b"GlobalRange = { 0, 299 }, CurrentID = 1, HiQ = true, "
         b'Version = "DaVinci Resolve 20.2.1.0006", '
+        b'CustomData = { TEMPLATE_ID = "' + template_id.encode() + b'" }, '
         b"Prefs = { Comp = { FrameFormat = { Rate = 60, Width = 1920, "
         b"Height = 1080, }, Unsorted = { GlobalEnd = 299 }, } }, "
         b"Compressed = true, }\0"
@@ -121,6 +128,13 @@ def pack_composition(tools: str) -> str:
         + comp
     )
     return (struct.pack(">I", len(qt_map)) + zlib.compress(qt_map)).hex()
+
+
+def composition_header(hex_blob: str) -> str:
+    """Return the plain-text Composition header that precedes the graph."""
+    data = zlib.decompress(bytes.fromhex(hex_blob)[4:])
+    marker = data.index(b"Composition {")
+    return data[marker : data.index(bytes([0]), marker)].decode()
 
 
 def unpack_composition(hex_blob: str) -> str:

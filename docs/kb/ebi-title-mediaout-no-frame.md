@@ -33,8 +33,9 @@ project and timeline open, run from the updated repository:
 & ".\有償版用スクリプト\repair_title_outputs.ps1"
 ```
 
-The script looks only for `EBI_` title clips on the **current timeline** with the
-bundled macro signature and an unconnected MediaOut input. It first exports a
+The script looks only at clips on the **current timeline** that carry the bundled
+macro signature and an unconnected MediaOut input. It matches on that signature,
+not on the clip name, so renamed titles are still repaired. It first exports a
 project backup under `Documents/ResolveTitleRepair`. It then connects that input
 to `Template.FindMainOutput(1)` using live Fusion objects, rather than guessing a
 serialized port alias. It does not recreate clips or edit text, timing, position,
