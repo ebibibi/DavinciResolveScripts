@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2070" height="1970" viewBox="0 0 2070 1970"><rect width="2070" height="1970" fill="#111b2c"/><g font-family="Noto Sans CJK JP,Noto Sans JP,Yu Gothic,sans-serif"><text x="30" y="55" fill="white" font-size="38">EBI TITLES — 12種類のテロップ</text><text x="30" y="98" fill="#aabbd2" font-size="23">配置見本 / Layout reference — Resolve実機レンダーではありません</text><g transform="translate(30,145)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_01_通常_白文字</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<text x="320.0" y="306.0" font-weight="700" font-size="32.0" fill="#ffffff" text-anchor="middle" dominant-baseline="central" stroke="#000" stroke-width="1" paint-order="stroke">ここに伝えたいポイント</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">短い要点。1〜2行。</text>
+</g>
+<g transform="translate(710,145)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_02_字幕_半透明帯</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="31.999999999999993" y="288.0" width="576.0" height="50.400000000000006" rx="6" fill="#060a11" opacity="0.78"/>
+<text x="320.0" y="313.2" font-weight="700" font-size="27.519999999999996" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >説明を読みやすく補足します</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">明るい映像でも読みやすい字幕。</text>
+</g>
+<g transform="translate(1390,145)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_03_強調_イエロー</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<text x="320.0" y="277.2" font-weight="700" font-size="48.0" fill="#ffd41f" text-anchor="middle" dominant-baseline="central" stroke="#000" stroke-width="1" paint-order="stroke">ここが重要！</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">重要語や結論を短く大きく。</text>
+</g>
+<g transform="translate(30,595)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_04_注意_レッド</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="51.20000000000001" y="259.20000000000005" width="537.6" height="57.6" rx="6" fill="#8c090e" opacity="0.9"/>
+<text x="320.0" y="288.0" font-weight="700" font-size="32.64" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >注意：変更前に確認</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">失敗しやすい操作や警告。</text>
+</g>
+<g transform="translate(710,595)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_05_完了_グリーン</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="57.600000000000016" y="261.00000000000006" width="524.8" height="54.0" rx="6" fill="#044a3b" opacity="0.9"/>
+<text x="320.0" y="288.0" font-weight="700" font-size="32.0" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >設定が完了しました</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">成功・解決・チェック完了。</text>
+</g>
+<g transform="translate(1390,595)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_06_見出し_左上</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="31.999999999999993" y="17.099999999999994" width="256.0" height="37.8" rx="6" fill="#0a1f40" opacity="0.9"/>
+<text x="160.0" y="35.99999999999999" font-weight="700" font-size="23.04" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >今日のテーマ</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">章や話題を左上に常時表示。</text>
+</g>
+<g transform="translate(30,1045)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_07_章タイトル_中央</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="38.4" y="115.2" width="563.2" height="129.6" rx="6" fill="#060a11" opacity="0.9"/>
+<text x="320.0" y="165.6" font-weight="700" font-size="46.08" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >次のステップへ</text>
+<text x="320.0" y="205.20000000000002" font-weight="700" font-size="20.48" fill="#a6ccff" text-anchor="middle" dominant-baseline="central" >ここから実際に操作します</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">話題の切り替え。本文と補足を別々に編集。</text>
+</g>
+<g transform="translate(710,1045)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_08_名前紹介_左下</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="35.20000000000002" y="250.20000000000002" width="275.2" height="75.6" rx="6" fill="#0a1f40" opacity="0.9"/>
+<text x="172.8" y="275.4" font-weight="700" font-size="30.08" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >お名前を入力</text>
+<text x="172.8" y="306.0" font-weight="700" font-size="17.28" fill="#add4ff" text-anchor="middle" dominant-baseline="central" >所属・役割を入力</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">話し手の名前と所属。</text>
+</g>
+<g transform="translate(1390,1045)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_09_補足_小さめ</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="31.999999999999993" y="312.3" width="576.0" height="34.2" rx="6" fill="#060a11" opacity="0.78"/>
+<text x="320.0" y="329.40000000000003" font-weight="700" font-size="18.560000000000002" fill="#e8f0fa" text-anchor="middle" dominant-baseline="central" >※ 環境によって表示が異なります</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">条件・注記。長文は2行用字幕へ。</text>
+</g>
+<g transform="translate(30,1495)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_10_引用_ホワイトカード</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="51.20000000000001" y="140.4" width="537.6" height="100.80000000000001" rx="6" fill="#f0f5fc" opacity="0.98"/>
+<text x="320.0" y="180.0" font-weight="700" font-size="31.36" fill="#0b131f" text-anchor="middle" dominant-baseline="central" >「大切なのは、続けること」</text>
+<text x="320.0" y="219.6" font-weight="700" font-size="16.64" fill="#40526e" text-anchor="middle" dominant-baseline="central" >出典・発言者を入力</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">引用と出典を分けて表示。</text>
+</g>
+<g transform="translate(710,1495)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_11_手順_ブルー</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="35.199999999999996" y="243.00000000000003" width="313.6" height="75.6" rx="6" fill="#061c3b" opacity="0.9"/>
+<text x="192.0" y="262.8" font-weight="700" font-size="17.92" fill="#99d1ff" text-anchor="middle" dominant-baseline="central" >STEP 01</text>
+<text x="192.0" y="293.4" font-weight="700" font-size="26.240000000000002" fill="#ffffff" text-anchor="middle" dominant-baseline="central" >まず設定画面を開く</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">手順番号と操作内容。</text>
+</g>
+<g transform="translate(1390,1495)">
+<text x="0" y="0" fill="#e5edf9" font-size="24">EBI_12_問いかけ_中央</text>
+<g transform="translate(0,20)">
+<rect width="640" height="360" rx="8" fill="#25334a"/>
+<path d="M0,300 L640,60 M0,180 L640,180 M320,0 L320,360" stroke="#36445a" fill="none"/>
+<rect x="31.999999999999993" y="144.0" width="576.0" height="72.0" rx="6" fill="#0e0e1b" opacity="0.9"/>
+<text x="320.0" y="180.0" font-weight="700" font-size="38.4" fill="#ffd41f" text-anchor="middle" dominant-baseline="central" >あなたなら、どうしますか？</text>
+</g>
+<text x="0" y="410" fill="#aabbd2" font-size="20">視聴者への問いかけ・疑問の提示。</text>
+</g></g></svg>
