@@ -193,7 +193,7 @@ def composition_tools(preset: dict) -> str:
             "MediaOut1",
             "MediaOut",
             {"Index": "0"},
-            {"Input": ("Template", "Output")},
+            {"Input": ("Template", "MainOutput1")},
         )
         + "\n}\0"
     )
