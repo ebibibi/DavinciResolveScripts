@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import audio_sync  # noqa: E402
 import dual_source  # noqa: E402
 import resolve_session  # noqa: E402
+import subscribe_cta  # noqa: E402
 from auto_editor_config import (  # noqa: E402
     DEFAULT_THRESHOLD_PERCENT,
     load_auto_editor_config,
@@ -433,6 +434,7 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
     apply_clip_properties(camera_items, dual_source.CAMERA_PROPERTIES, "カメラ")
 
     append_ending_video(media_pool, plan.end_frame)
+    subscribe_cta.add_subscribe_ctas(media_pool, timeline)
     return True
 
 
