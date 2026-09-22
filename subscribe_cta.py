@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-CTA_TEXT = "チャンネル登録よろしくね！"
+CTA_TEXT = "チャンネル登録よろしくお願いします！"
 CTA_TEMPLATE_NAMES = ("テロップ", "Text+")
 CTA_CLIP_MARKERS = ("01_EBI_CHAN_OP", "03_EBI_CHAN_IN")
 CTA_TRACK_INDEX = 3
