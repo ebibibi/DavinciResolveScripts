@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from auto_editor_config import load_auto_editor_config  # noqa: E402
+from subscribe_cta import add_subscribe_ctas  # noqa: E402
 
 print("DaVinci Resolve自動動画編集スクリプト（無料版）開始")
 
@@ -306,6 +307,9 @@ except Exception as e:
     print(f"タイムラインの挿入でエラー: {str(e)}")
     sys.exit(1)
 
+
+# メインタイムライン上のオープニング／エンディングへ登録CTAを重ねる
+add_subscribe_ctas(media_pool, main_timeline)
 
 # 編集ポジションをタイムライン先頭に移動
 try:
