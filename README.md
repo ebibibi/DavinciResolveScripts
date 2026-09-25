@@ -38,8 +38,6 @@ DaVinci Resolve process:
    (default: `audio:threshold=3%` and `--margin 0.3sec`).
 5. Import the generated timeline and combine it with the template timeline and
    ending clip.
-6. Overlay the editable `チャンネル登録よろしくお願いします！` title on both the branded
-   opening and `03_EBI_CHAN_IN` ending animations.
 
 Use this route when the instruction is effectively “do nothing extra.”
 
@@ -60,9 +58,6 @@ lecture recorded as two files in one folder, for example `!OBS録画/az900-3/`:
    The timeline, the two recordings and the cut list may all run at different
    frame rates, so the plan is computed in seconds and converted per track.
 6. Append the template's ending clip after the last segment.
-7. Overlay the editable `チャンネル登録よろしくお願いします！` title on both branded
-   animations. The CTA sits in the lower safe area on V3 with a black outline,
-   so it remains readable without covering the animation's center.
 
 The folder can also be given explicitly:
 
