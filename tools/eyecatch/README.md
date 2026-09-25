@@ -1,6 +1,6 @@
 # Eyecatch stingers from code
 
-Two-second branded stingers (1920x1080, 60 fps, stereo 48 kHz) for chapter
+Ten two-second branded stingers (1920x1080, 60 fps, stereo 48 kHz) for chapter
 breaks, rendered entirely from code. They sit alongside the three hand-made
 clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 
@@ -10,6 +10,12 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 | `bounce` | E-B-I-S-U-D-A drop in and bounce, fly off, and the logo pops out with confetti | a springy boing per letter landing (rising up the scale, panned left to right), a whoosh, then pop, clap and brass |
 | `morph` | circle → square → triangle → star (the same 240 outline points), then the logo | 8-bit blips played on the wave that matches each shape (sine, square, triangle, saw), gliding as they morph, then a power-up arpeggio |
 | `tunnel` | wireframe cube inside a tunnel accelerating at the camera, then the logo slams in | an engine drone that climbs with the speed, a whoosh per ring rushing past, a reverse cymbal, then a heavy impact and sub drop |
+| `typewriter` | a terminal types `> EBISUDA CHANNEL` one key per step, Enter lands the logo | a click-and-thunk per key, a deep space bar, the carriage bell, then Enter and an electric piano chord |
+| `ripple` | drops fall into still water and send out rings; the last one floods the frame yellow | bubble "bloops" with darker echoes for the rings, rising bubbles, then a big splash and a soft pad |
+| `slice` | three blade strokes cut the dark frame open; on the hit the halves fall away | a swish before each cut and ringing steel on it, then a taiko hit and a gong |
+| `orbit` | planets circle on tilted orbits, speed up and spiral into the centre | sonar pings echoing through space, a warbling FM pad that climbs, then a deep boom and FM bells |
+| `pixelate` | the logo arrives as coarse pixels and sharpens one step per beat | data chatter that gets faster and higher each step, bit-crushed, then a two-tone "done" chime |
+| `countdown` | an old film leader counts 4-3-2-1 with a sweeping hand, scratches and flicker | projector rattle at 24 clicks a second, a beep per number, then an orchestral hit |
 
 ## Run
 
@@ -42,6 +48,16 @@ python tools/eyecatch/render.py morph --out D:/素材
   `getImageData`, which a `file://` page may not do), steps headless Chromium
   frame by frame, pipes PNGs to ffmpeg, and muxes the audio.
 
-To add a variant, add a `variants.<name>` object with `setup()` and
-`draw(ctx, beat, cue)` in `index.html`, a sound function in `SOUNDS`, and an
-entry in `timeline.json` naming both.
+## Files
+
+- `timeline.json` — BPM, length, the hit beat, and each variant's own timing
+- `engine.js` — maths, easing, shared drawing, motion blur and finishing, the frame loop
+- `variants/<name>.js` — one picture per file
+- `synth.py` — oscillators, noise, filters and the stereo `Mix`
+- `sounds/<name>.py` — one sound design per file, registered in `sounds/__init__.py`
+- `make_audio.py` / `render.py` — soundtrack assembly and the renderer
+
+To add a variant: write `variants/<name>.js` (a `variants.<name>` object with
+`setup()` and `draw(ctx, beat, cue)`) and include it in `index.html`, write
+`sounds/<sound>.py` with a `design(cue)` and register it, and add an entry to
+`timeline.json` naming the sound.
