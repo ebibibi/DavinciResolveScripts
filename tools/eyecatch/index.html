@@ -197,14 +197,13 @@ variants.assemble = {
 };
 
 variants.bounce = {
-  word: 'EBISUDA',
   setup() {},
   draw(ctx, beat, cue) {
     ctx.fillStyle = BRAND.yellow;
     ctx.fillRect(0, 0, W, H);
     stripes(ctx, beat);
 
-    const letters = this.word.split('');
+    const letters = cue.word.split('');
     const pitch = 190;
     const left = W / 2 - ((letters.length - 1) * pitch) / 2;
     const exit = span(beat, 1.75, 0.25, ease.expoIn);
@@ -212,7 +211,7 @@ variants.bounce = {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     letters.forEach((letter, i) => {
-      const drop = span(beat, i * 0.2, 0.8, ease.bounceOut);
+      const drop = span(beat, i * cue.drop.every, cue.drop.length, ease.bounceOut);
       if (drop <= 0) return;
       const y = lerp(-300, H / 2, drop) - exit * (900 + i * 60);
       const x = left + i * pitch;
@@ -354,7 +353,8 @@ variants.tunnel = {
   setup() {},
   draw(ctx, beat, cue) {
     const focal = 700;
-    const speed = 5 + span(beat, 0, cue.hit, ease.expoIn) * 40;
+    const [cruise, boost] = cue.speed;
+    const speed = cruise + span(beat, 0, cue.hit, ease.expoIn) * boost;
     const travel = beat * speed;
 
     ctx.fillStyle = BRAND.ink;
@@ -487,6 +487,7 @@ let accum;
 let channel;
 let timeline;
 let variant;
+let variantSpec;
 
 function canvasOf(w, h) {
   const c = document.createElement('canvas');
@@ -511,6 +512,7 @@ window.setup = async function (config, variantName, logoUrl) {
   logoPoints = sampleLogo(4200, 3);
   grainTile = makeGrain();
   variant = variants[variantName];
+  variantSpec = config.variants[variantName];
   if (!variant) throw new Error(`Unknown variant: ${variantName}`);
   variant.setup();
   return Math.round((config.beats * 60 / config.bpm) * config.fps);
@@ -518,7 +520,7 @@ window.setup = async function (config, variantName, logoUrl) {
 
 window.renderFrame = function (frame) {
   const { bpm, fps, hitBeat } = timeline;
-  const cue = { hit: hitBeat };
+  const cue = { ...variantSpec, hit: hitBeat };
   const sceneCtx = scene.getContext('2d');
   const accumCtx = accum.getContext('2d');
 
