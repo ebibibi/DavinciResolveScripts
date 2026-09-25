@@ -25,6 +25,11 @@ launchers also install them in the current user's Fusion Titles library, while
 preserving locally customized files. Choose a title and edit its text in the
 Inspector. See the [catalog, installation guide and validation status](title_presets/README.md).
 
+## Eyecatch stingers
+
+New branded two-second stingers can be rendered from code, synchronised to the
+beat with synthesized sound. See [tools/eyecatch](tools/eyecatch/README.md).
+
 ## Stable workflow
 
 The stable launcher runs `auto_video_editor.py` and keeps the established

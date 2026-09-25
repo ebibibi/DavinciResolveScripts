@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eyecatch stingers</title>
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script>
+// Every event is written in beats. render.py and make_audio.py read the same
+// timeline.json, so picture and sound cannot drift apart.
+
+const BRAND = {
+  yellow: '#F2B632',
+  cream: '#E8CEB0',
+  red: '#C8102E',
+  ink: '#1C1411',
+};
+
+const SUBFRAMES = 10;      // motion blur samples per frame (5 left visible steps)
+const SHUTTER = 0.5;       // fraction of a frame the virtual shutter stays open
+const LOGO_HEIGHT = 600;
+
+// ---------- maths ----------
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const ease = {
+  linear: (t) => t,
+  expoOut: (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+  expoIn: (t) => (t <= 0 ? 0 : Math.pow(2, 10 * t - 10)),
+  backOut: (t) => {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  },
+  bounceOut: (t) => {
+    const n1 = 7.5625;
+    const d1 = 2.75;
+    if (t < 1 / d1) return n1 * t * t;
+    if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+    if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+    return n1 * (t -= 2.625 / d1) * t + 0.984375;
+  },
+  inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+};
+
+/** 0..1 progress of an event that starts on `from` and lasts `length` beats. */
+function span(beat, from, length, curve = ease.linear) {
+  return curve(clamp01((beat - from) / length));
+}
+
+// ---------- shared drawing ----------
+
+let W = 1920;
+let H = 1080;
+let logo = null;
+let logoPoints = [];
+
+function drawLogo(ctx, scale = 1, alpha = 1, rotation = 0) {
+  const h = LOGO_HEIGHT * scale;
+  const w = h * (logo.width / logo.height);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(rotation);
+  ctx.drawImage(logo, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
+/** Opaque logo pixels as points in canvas space, each with its own colour. */
+function sampleLogo(count, seed) {
+  const c = document.createElement('canvas');
+  c.width = logo.width;
+  c.height = logo.height;
+  const g = c.getContext('2d');
+  g.drawImage(logo, 0, 0);
+  const data = g.getImageData(0, 0, c.width, c.height).data;
+  const opaque = [];
+  for (let y = 0; y < c.height; y += 2) {
+    for (let x = 0; x < c.width; x += 2) {
+      const i = (y * c.width + x) * 4;
+      if (data[i + 3] > 200) opaque.push([x, y, data[i], data[i + 1], data[i + 2]]);
+    }
+  }
+  const rand = mulberry32(seed);
+  const scale = LOGO_HEIGHT / logo.height;
+  const points = [];
+  for (let n = 0; n < count; n++) {
+    const [x, y, r, gg, b] = opaque[Math.floor(rand() * opaque.length)];
+    points.push({
+      x: W / 2 + (x - logo.width / 2) * scale,
+      y: H / 2 + (y - logo.height / 2) * scale,
+      color: `rgb(${r},${gg},${b})`,
+    });
+  }
+  return points;
+}
+
+function shockwave(ctx, beat, at, color, maxRadius = 900) {
+  const p = span(beat, at, 0.6, ease.expoOut);
+  if (p <= 0 || p >= 1) return;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 1 - p;
+  ctx.lineWidth = lerp(60, 2, p);
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, lerp(40, maxRadius, p), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function flash(ctx, beat, at, length = 0.12) {
+  const p = span(beat, at, length);
+  if (p <= 0 || p >= 1) return;
+  ctx.save();
+  ctx.fillStyle = '#fff';
+  ctx.globalAlpha = 0.85 * (1 - p);
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/** Logo landing on the hit beat: pop in with overshoot, then settle. */
+function landLogo(ctx, beat, hit, from = 0.4) {
+  const p = span(beat, hit, 0.5, ease.backOut);
+  if (beat < hit) return;
+  drawLogo(ctx, lerp(from, 1, p), clamp01((beat - hit) * 8));
+}
+
+// ---------- variants ----------
+
+const variants = {};
+
+variants.assemble = {
+  setup() {
+    const rand = mulberry32(7);
+    this.particles = logoPoints.map((target) => {
+      const angle = rand() * Math.PI * 2;
+      const radius = 900 + rand() * 700;
+      return {
+        ...target,
+        sx: W / 2 + Math.cos(angle) * radius,
+        sy: H / 2 + Math.sin(angle) * radius * 0.7,
+        delay: rand() * 0.5,
+        size: 2 + rand() * 3,
+      };
+    });
+  },
+  draw(ctx, beat, cue) {
+    ctx.fillStyle = BRAND.ink;
+    ctx.fillRect(0, 0, W, H);
+
+    // The brand yellow opens from the centre on the hit.
+    const open = span(beat, cue.hit, 0.5, ease.expoOut);
+    if (open > 0) {
+      ctx.fillStyle = BRAND.yellow;
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, open * 1200, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (beat < cue.hit + 0.1) {
+      const fade = 1 - span(beat, cue.hit, 0.1);
+      ctx.globalAlpha = fade;
+      for (const p of this.particles) {
+        const t = span(beat, 0.25 + p.delay, 1.3, ease.expoOut);
+        const swirl = (1 - t) * 1.6;
+        const dx = p.sx - W / 2;
+        const dy = p.sy - H / 2;
+        const rx = W / 2 + dx * Math.cos(swirl) - dy * Math.sin(swirl);
+        const ry = H / 2 + dx * Math.sin(swirl) + dy * Math.cos(swirl);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(lerp(rx, p.x, t), lerp(ry, p.y, t), p.size, p.size);
+      }
+      ctx.globalAlpha = 1;
+    }
+    landLogo(ctx, beat, cue.hit, 0.85);
+    shockwave(ctx, beat, cue.hit, BRAND.cream);
+    flash(ctx, beat, cue.hit);
+  },
+};
+
+variants.bounce = {
+  word: 'EBISUDA',
+  setup() {},
+  draw(ctx, beat, cue) {
+    ctx.fillStyle = BRAND.yellow;
+    ctx.fillRect(0, 0, W, H);
+    stripes(ctx, beat);
+
+    const letters = this.word.split('');
+    const pitch = 190;
+    const left = W / 2 - ((letters.length - 1) * pitch) / 2;
+    const exit = span(beat, 1.75, 0.25, ease.expoIn);
+    ctx.font = '900 300px "Noto Sans CJK JP", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    letters.forEach((letter, i) => {
+      const drop = span(beat, i * 0.2, 0.8, ease.bounceOut);
+      if (drop <= 0) return;
+      const y = lerp(-300, H / 2, drop) - exit * (900 + i * 60);
+      const x = left + i * pitch;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate((1 - drop) * (i % 2 ? 0.4 : -0.4));
+      ctx.fillStyle = BRAND.ink;
+      ctx.fillText(letter, 10, 12);
+      ctx.fillStyle = BRAND.red;
+      ctx.fillText(letter, 0, 0);
+      ctx.restore();
+    });
+
+    burst(ctx, beat, cue.hit, 11);
+    landLogo(ctx, beat, cue.hit, 0.2);
+    shockwave(ctx, beat, cue.hit, BRAND.red);
+  },
+};
+
+function stripes(ctx, beat) {
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = BRAND.cream;
+  const offset = (beat * 120) % 160;
+  ctx.translate(W / 2, H / 2);
+  ctx.rotate(-0.35);
+  for (let x = -1600 - offset; x < 1600; x += 160) ctx.fillRect(x, -1200, 60, 2400);
+  ctx.restore();
+}
+
+/** Confetti thrown outward from the centre on the hit beat. */
+function burst(ctx, beat, at, seed) {
+  const p = span(beat, at, 1.4, ease.expoOut);
+  if (p <= 0) return;
+  const rand = mulberry32(seed);
+  const colors = [BRAND.red, BRAND.cream, BRAND.ink, '#ffffff'];
+  ctx.save();
+  ctx.globalAlpha = 1 - span(beat, at + 0.8, 1.2);
+  for (let i = 0; i < 180; i++) {
+    const angle = rand() * Math.PI * 2;
+    const dist = (300 + rand() * 900) * p;
+    const size = 8 + rand() * 18;
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.save();
+    ctx.translate(W / 2 + Math.cos(angle) * dist, H / 2 + Math.sin(angle) * dist + p * p * 120);
+    ctx.rotate(rand() * 6 + p * 8);
+    ctx.fillRect(-size / 2, -size / 4, size, size / 2);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Every shape is the same 240 points, so any two can be blended point by point.
+const OUTLINE_POINTS = 240;
+
+function polygonOutline(corners, rotation = -Math.PI / 2, inner = 1) {
+  const vertices = [];
+  const count = inner === 1 ? corners : corners * 2;
+  for (let i = 0; i < count; i++) {
+    const r = inner !== 1 && i % 2 ? inner : 1;
+    const a = rotation + (i / count) * Math.PI * 2;
+    vertices.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  const points = [];
+  for (let i = 0; i < OUTLINE_POINTS; i++) {
+    const t = (i / OUTLINE_POINTS) * vertices.length;
+    const k = Math.floor(t);
+    const [ax, ay] = vertices[k];
+    const [bx, by] = vertices[(k + 1) % vertices.length];
+    points.push([lerp(ax, bx, t - k), lerp(ay, by, t - k)]);
+  }
+  return points;
+}
+
+function circleOutline() {
+  return Array.from({ length: OUTLINE_POINTS }, (_, i) => {
+    const a = -Math.PI / 2 + (i / OUTLINE_POINTS) * Math.PI * 2;
+    return [Math.cos(a), Math.sin(a)];
+  });
+}
+
+variants.morph = {
+  setup() {
+    this.shapes = [
+      circleOutline(),
+      polygonOutline(4, -Math.PI / 4),
+      polygonOutline(3),
+      polygonOutline(5, -Math.PI / 2, 0.45),
+    ];
+    this.colors = [BRAND.red, BRAND.yellow, BRAND.ink, BRAND.red];
+  },
+  draw(ctx, beat, cue) {
+    ctx.fillStyle = BRAND.cream;
+    ctx.fillRect(0, 0, W, H);
+
+    const step = Math.min(3, Math.floor(beat / 0.5));
+    const next = Math.min(3, step + 1);
+    const t = step === 3 ? 0 : span(beat, step * 0.5 + 0.2, 0.3, ease.inOutCubic);
+    const a = this.shapes[step];
+    const b = this.shapes[next];
+    const grow = span(beat, cue.hit - 0.25, 0.25, ease.expoIn);
+    const radius = 300 * span(beat, 0, 0.35, ease.backOut) + grow * 1800;
+    const spin = beat * 1.4;
+
+    if (beat < cue.hit + 0.05) {
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(spin);
+      ctx.fillStyle = step === 3 ? this.colors[3] : blend(this.colors[step], this.colors[next], t);
+      ctx.beginPath();
+      a.forEach(([ax, ay], i) => {
+        const x = lerp(ax, b[i][0], t) * radius;
+        const y = lerp(ay, b[i][1], t) * radius;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (beat >= cue.hit) {
+      ctx.fillStyle = BRAND.yellow;
+      ctx.fillRect(0, 0, W, H);
+      stripes(ctx, beat);
+    }
+    landLogo(ctx, beat, cue.hit, 0.3);
+    shockwave(ctx, beat, cue.hit, BRAND.cream);
+  },
+};
+
+function blend(c1, c2, t) {
+  const parse = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const [a, b] = [parse(c1), parse(c2)];
+  return `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], t))).join(',')})`;
+}
+
+variants.tunnel = {
+  setup() {},
+  draw(ctx, beat, cue) {
+    const focal = 700;
+    const speed = 5 + span(beat, 0, cue.hit, ease.expoIn) * 40;
+    const travel = beat * speed;
+
+    ctx.fillStyle = BRAND.ink;
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+
+    // Square rings rushing towards the camera: farther means smaller.
+    for (let i = 0; i < 26; i++) {
+      const z = 26 - ((i + travel) % 26);
+      if (z < 0.3) continue;
+      const s = (focal / z) * 1.2;
+      ctx.globalAlpha = clamp01(1.4 - z / 20);
+      ctx.strokeStyle = i % 4 === 0 ? BRAND.yellow : BRAND.cream;
+      ctx.lineWidth = Math.max(1, 14 / z);
+      ctx.strokeRect(-s, -s * 0.62, s * 2, s * 1.24);
+    }
+    ctx.globalAlpha = 1;
+
+    // A wireframe cube in the middle, projected by hand.
+    const cube = [-1, 1].flatMap((x) => [-1, 1].flatMap((y) => [-1, 1].map((z) => [x, y, z])));
+    const ry = beat * 2.2;
+    const rx = beat * 1.3;
+    const size = 130 + span(beat, 1, 1, ease.expoIn) * 600;
+    const projected = cube.map(([x, y, z]) => {
+      const x1 = x * Math.cos(ry) - z * Math.sin(ry);
+      const z1 = x * Math.sin(ry) + z * Math.cos(ry);
+      const y1 = y * Math.cos(rx) - z1 * Math.sin(rx);
+      const z2 = y * Math.sin(rx) + z1 * Math.cos(rx);
+      const k = 4 / (4 + z2);
+      return [x1 * size * k, y1 * size * k];
+    });
+    ctx.strokeStyle = BRAND.red;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      for (let j = i + 1; j < 8; j++) {
+        const diff = cube[i].filter((v, n) => v !== cube[j][n]).length;
+        if (diff !== 1) continue;
+        ctx.moveTo(...projected[i]);
+        ctx.lineTo(...projected[j]);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    if (beat >= cue.hit) {
+      ctx.fillStyle = BRAND.yellow;
+      ctx.fillRect(0, 0, W, H);
+      stripes(ctx, beat);
+      const slam = span(beat, cue.hit, 0.35, ease.expoOut);
+      drawLogo(ctx, lerp(2.6, 1, slam), 1);
+    }
+    flash(ctx, beat, cue.hit, 0.2);
+  },
+};
+
+// ---------- finishing ----------
+
+let grainTile = null;
+
+function makeGrain() {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const g = c.getContext('2d');
+  const img = g.createImageData(size, size);
+  const rand = mulberry32(99);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.floor(rand() * 255);
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+function grain(ctx, frame) {
+  const rand = mulberry32(frame + 1);
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.translate(-Math.floor(rand() * 256), -Math.floor(rand() * 256));
+  ctx.fillStyle = ctx.createPattern(grainTile, 'repeat');
+  ctx.fillRect(0, 0, W + 256, H + 256);
+  ctx.restore();
+}
+
+function vignette(ctx) {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.26)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/** Split red / green / blue sideways, then shear a few horizontal slices. */
+function glitch(ctx, source, frame, strength) {
+  const rand = mulberry32(frame * 31 + 5);
+  const shift = Math.round(24 * strength);
+  ctx.save();
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+  const g = channel.getContext('2d');
+  [['#ff0000', -shift], ['#00ff00', 0], ['#0000ff', shift]].forEach(([color, dx]) => {
+    g.globalCompositeOperation = 'source-over';
+    // Enlarged, then offset inside the layer, so a shifted channel still covers every edge.
+    g.drawImage(source, dx - shift, 0, W + shift * 2, H);
+    g.globalCompositeOperation = 'multiply';
+    g.fillStyle = color;
+    g.fillRect(0, 0, W, H);
+    ctx.drawImage(channel, 0, 0);
+  });
+  ctx.restore();
+  for (let i = 0; i < 7; i++) {
+    const y = Math.floor(rand() * H);
+    const h = 8 + Math.floor(rand() * 60);
+    const dx = Math.round((rand() - 0.5) * 160 * strength);
+    ctx.drawImage(ctx.canvas, 0, y, W, h, dx, y, W, h);
+  }
+}
+
+// ---------- frame loop ----------
+
+let out;
+let scene;
+let accum;
+let channel;
+let timeline;
+let variant;
+
+function canvasOf(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+window.setup = async function (config, variantName, logoUrl) {
+  timeline = config;
+  W = config.width;
+  H = config.height;
+  out = document.getElementById('out');
+  out.width = W;
+  out.height = H;
+  scene = canvasOf(W, H);
+  accum = canvasOf(W, H);
+  channel = canvasOf(W, H);
+  logo = new Image();
+  logo.src = logoUrl;
+  await logo.decode();
+  logoPoints = sampleLogo(4200, 3);
+  grainTile = makeGrain();
+  variant = variants[variantName];
+  if (!variant) throw new Error(`Unknown variant: ${variantName}`);
+  variant.setup();
+  return Math.round((config.beats * 60 / config.bpm) * config.fps);
+};
+
+window.renderFrame = function (frame) {
+  const { bpm, fps, hitBeat } = timeline;
+  const cue = { hit: hitBeat };
+  const sceneCtx = scene.getContext('2d');
+  const accumCtx = accum.getContext('2d');
+
+  // Motion blur: draw the scene at several instants inside the shutter and average.
+  for (let s = 0; s < SUBFRAMES; s++) {
+    const t = (frame + (s / SUBFRAMES - 0.5) * SHUTTER) / fps;
+    const beat = Math.max(0, t) * bpm / 60;
+    sceneCtx.save();
+    variant.draw(sceneCtx, beat, cue);
+    sceneCtx.restore();
+    accumCtx.globalAlpha = 1 / (s + 1);
+    accumCtx.drawImage(scene, 0, 0);
+  }
+  accumCtx.globalAlpha = 1;
+
+  const ctx = out.getContext('2d');
+  const beat = (frame / fps) * bpm / 60;
+  const glitchStrength = Math.max(
+    span(beat, hitBeat - 0.3, 0.3) * (beat < hitBeat ? 0.6 : 0),
+    1 - span(beat, hitBeat, 0.2),
+  );
+  if (glitchStrength > 0.05 && beat >= hitBeat - 0.3 && beat < hitBeat + 0.2) {
+    glitch(ctx, accum, frame, glitchStrength);
+  } else {
+    ctx.drawImage(accum, 0, 0);
+  }
+  grain(ctx, frame);
+  vignette(ctx);
+};
+</script>
+</body>
+</html>
