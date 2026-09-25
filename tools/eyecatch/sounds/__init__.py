@@ -7,11 +7,28 @@ from collections.abc import Callable
 from cue import Cue
 from synth import Mix
 
-from . import boing, chiptune, engine, sparkle
+from . import (
+    blade,
+    boing,
+    chiptune,
+    data,
+    engine,
+    projector,
+    space,
+    sparkle,
+    typewriter,
+    water,
+)
 
 SOUNDS: dict[str, Callable[[Cue], Mix]] = {
     "sparkle": sparkle.design,
     "boing": boing.design,
     "chiptune": chiptune.design,
     "engine": engine.design,
+    "typewriter": typewriter.design,
+    "water": water.design,
+    "blade": blade.design,
+    "space": space.design,
+    "data": data.design,
+    "projector": projector.design,
 }
