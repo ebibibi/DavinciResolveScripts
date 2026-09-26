@@ -19,25 +19,34 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 
 ## End card (`outro`)
 
-A 20-second (40-beat) card built around the channel's YouTube end screen, which
-is imported onto every video: two video elements stacked on the left and a
-subscribe element at the bottom right, shown for the last 20 seconds. Those
-regions are listed in `endScreen` in `timeline.json` and drawn as framed slots,
-so YouTube's elements sit inside them; all content uses the space in between.
-If the end-screen layout ever changes, update those rectangles.
+A 20-second (40-beat) card for new videos: a full-screen showcase of the channel,
+then a layout built around the YouTube end screen.
 
-1. **Beats 0–8 — the range.** In the centre panel オンプレ ↓ クラウド ↓ 生成AI
+**Beats 0–20 — full-screen showcase** (`variants/outro-promo.js`, `promo` in `timeline.json`)
+
+1. **Microsoft MVP**: a ring of one segment per year fills while the number counts
+   up to the streak, then lands with a fanfare and confetti (年連続受賞).
+2. **Range**: topic chips scroll in three rows while オンプレ → クラウド → 生成AI
    lands one word per beat, then "ぜんぶ、ここで解説します".
-2. **Beats 8–18 — the ask.** The panel flies off; 高評価, チャンネル登録・通知オン
-   and メンバーシップ (tagged おすすめ) slide in and a pointer clicks each on the beat.
-3. **Beats 18–38 — hold without going stale.** The cards take turns to glow, the
-   YouTube membership card twice as often (`glowOrder`); the music drops into a
-   breakdown and comes back. Thanks appears under the logo on beat 32.
-4. **Beats 38–40 — the end.** The logo pulses over a final chord.
+3. **Track record**: four tiles pop in on the beat and count up — 解説動画 900本以上,
+   インフラの現場で 20年以上, PCに触れてきて 40年以上, and the book.
+4. **Who this is**: logo, name, what the channel covers, and an MVP badge, over a
+   musical breakdown that rises into the switch.
 
-Topic chips scroll along the top and bottom edges the whole time. Nothing is
-dated, and copy, topics and timing are data under `variants.outro`. It renders
-to `EBI_CHAN_OUTRO.mp4` (about 11 minutes: 1,200 frames x 10 blur samples).
+A yellow bar sweeps across between scenes. The track-record numbers are written as
+"…以上" so they stay true; **the MVP streak (`promo.mvp.years` and
+`promo.identity.badge`) is the one value to bump each year.**
+
+**Beats 20–40 — end-screen layout** (`variants/outro.js`)
+
+Set the video's end screen to the last 10 seconds: two video elements stacked on the
+left and a subscribe element at the bottom right. Those regions are `endScreen` in
+`timeline.json` and are drawn as framed slots. In between, 高評価, チャンネル登録・通知オン
+and メンバーシップ (tagged おすすめ, glowing twice as often via `glowOrder`) are clicked
+on the beat; thanks appears under the logo on beat 34 and the logo pulses on the final
+chord at beat 38.
+
+It renders to `EBI_CHAN_OUTRO.mp4` (about 11 minutes: 1,200 frames x 10 blur samples).
 
 A variant can set its own `beats`, `hitBeat` and `output` name in `timeline.json`;
 anything it leaves out comes from the top level.

@@ -1,8 +1,8 @@
-// End card, built around the channel's YouTube end screen: for 20 seconds YouTube
-// draws two video elements down the left and a subscribe element at the bottom
-// right. Those regions (cue.endScreen) stay framed slots; everything else lives
-// in the free space — the range first, then the four asks, then thanks.
-// Nothing here is dated, so the same file can close every video.
+// End card. Until cue.hit it is a full-screen showcase of the channel
+// (outro-promo.js). From cue.hit it switches to the layout built around the
+// YouTube end screen: two video elements down the left and a subscribe element
+// at the bottom right (cue.endScreen) stay framed slots, and the asks and the
+// thanks live in the space between them.
 const JP = '"Noto Sans CJK JP", sans-serif';
 const EMOJI = '"Noto Color Emoji", sans-serif';
 const CENTER = { x: 700, y: 125, w: 815, h: 800 };
@@ -16,14 +16,19 @@ variants.outro = {
   },
 
   draw(ctx, beat, cue) {
+    if (beat < cue.hit) {
+      outroPromo.draw(ctx, beat, cue);
+      return;
+    }
+    // Layout elements time their entrances from the switch, not from zero.
+    const local = beat - cue.hit;
     ctx.fillStyle = BRAND.yellow;
     ctx.fillRect(0, 0, W, H);
     stripes(ctx, beat);
-    this.drawMarquee(ctx, beat, cue);
-    this.drawSlots(ctx, beat, cue);
-    this.drawSide(ctx, beat, cue);
+    this.drawMarquee(ctx, beat, local, cue);
+    this.drawSlots(ctx, beat, local, cue);
+    this.drawSide(ctx, beat, local, cue);
     cue.cta.forEach((card, i) => this.drawCard(ctx, beat, cue, card, i));
-    if (beat < cue.hit + 0.5) this.drawRange(ctx, beat, cue);
     this.drawCursor(ctx, beat, cue);
   },
 
@@ -33,7 +38,7 @@ variants.outro = {
 
   // ---------- always on ----------
 
-  drawMarquee(ctx, beat, cue) {
+  drawMarquee(ctx, beat, local, cue) {
     // Topic chips run along the top and bottom edges for the whole card,
     // so something is always moving even while the viewer reads.
     const rows = [cue.topics[0].concat(cue.topics[1]), cue.topics[2].concat(cue.topics[1])];
@@ -42,13 +47,13 @@ variants.outro = {
     ctx.font = `700 30px ${JP}`;
     ctx.textBaseline = 'middle';
     if (!this.chipWidths) this.chipWidths = rows.map((row) => row.map((t) => ctx.measureText(t).width + 48));
-    const travel = beat * 110 + Math.pow(span(beat, 5, 3), 3) * 700;
+    const travel = beat * 110;
     const lit = Math.floor(beat * 2);
     rows.forEach((row, r) => {
       const widths = this.chipWidths[r];
       const loop = widths.reduce((a, b) => a + b + 18, 0);
       const dir = r ? 1 : -1;
-      const enter = span(beat, r * 0.2, 0.7, ease.expoOut);
+      const enter = span(local, r * 0.2, 0.7, ease.expoOut);
       let x = (((dir * travel) % loop) + loop) % loop - loop + dir * (1 - enter) * 1400;
       for (let k = 0; x < W + loop; k++) {
         const i = k % row.length;
@@ -69,12 +74,12 @@ variants.outro = {
     ctx.restore();
   },
 
-  drawSlots(ctx, beat, cue) {
+  drawSlots(ctx, beat, local, cue) {
     // YouTube covers these with its own elements; the frame makes them look planned.
     const { videos, subscribe } = cue.endScreen;
     const slots = videos.concat([subscribe]);
     slots.forEach(([x, y, w, h], i) => {
-      const p = span(beat, 0.2 + i * 0.25, 0.5, ease.expoOut);
+      const p = span(local, 0.2 + i * 0.25, 0.5, ease.expoOut);
       ctx.save();
       ctx.globalAlpha = p;
       ctx.fillStyle = 'rgba(28,20,17,0.16)';
@@ -91,7 +96,7 @@ variants.outro = {
     ctx.save();
     ctx.font = `900 28px ${JP}`;
     ctx.fillStyle = BRAND.ink;
-    ctx.globalAlpha = span(beat, 0.4, 0.5);
+    ctx.globalAlpha = span(local, 0.4, 0.5);
     ctx.fillText('▶ 次に見るならこちら', videos[0][0] + 6, videos[0][1] - 14);
     ctx.textAlign = 'center';
     const nudge = 6 * Math.abs(Math.sin(beat * Math.PI));
@@ -99,9 +104,9 @@ variants.outro = {
     ctx.restore();
   },
 
-  drawSide(ctx, beat, cue) {
+  drawSide(ctx, beat, local, cue) {
     const cx = SIDE.x + SIDE.w / 2;
-    const inn = span(beat, 0.3, 0.6, ease.backOut);
+    const inn = span(local, 0.3, 0.6, ease.backOut);
     const pulse = beat >= cue.endAt ? 1 + 0.1 * Math.exp(-(beat - cue.endAt) * 6) : 1;
     const bob = Math.sin(beat * Math.PI) * 6;
     const h = 400 * inn * pulse;
@@ -123,7 +128,7 @@ variants.outro = {
     ctx.save();
     ctx.textAlign = 'center';
     ctx.fillStyle = BRAND.ink;
-    ctx.globalAlpha = span(beat, 0.8, 0.5) * (1 - thanks);
+    ctx.globalAlpha = span(local, 0.8, 0.5) * (1 - thanks);
     ctx.font = `900 40px ${JP}`;
     ctx.fillText('胡田昌彦', cx, 580);
     ctx.font = `700 21px ${JP}`;
@@ -135,59 +140,7 @@ variants.outro = {
     ctx.restore();
   },
 
-  // ---------- part 1: the range ----------
-
-  drawRange(ctx, beat, cue) {
-    const out = span(beat, cue.hit, 0.45, ease.expoIn);
-    const { x, y, w, h } = CENTER;
-    ctx.save();
-    ctx.translate(0, -out * 1100);
-    ctx.fillStyle = BRAND.ink;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 28);
-    ctx.fill();
-    const cx = x + w / 2;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const kicker = span(beat, 0, 0.4, ease.expoOut);
-    ctx.globalAlpha = kicker;
-    ctx.font = `700 34px ${JP}`;
-    ctx.fillStyle = BRAND.cream;
-    ctx.fillText('胡田昌彦チャンネルの守備範囲', cx, 205);
-    ctx.globalAlpha = 1;
-
-    const { words, at, tagline, taglineAt } = cue.range;
-    const nod = beat >= at[at.length - 1] ? 1 + 0.05 * Math.exp(-(beat % 1) * 8) : 1;
-    words.forEach((word, i) => {
-      const p = span(beat, at[i], 0.45, ease.backOut);
-      const wy = 330 + i * 180;
-      if (p > 0) {
-        ctx.save();
-        ctx.translate(cx, wy);
-        ctx.scale(p * nod, p * nod);
-        ctx.font = `900 112px ${JP}`;
-        ctx.fillStyle = i === words.length - 1 ? BRAND.yellow : BRAND.cream;
-        ctx.fillText(word, 0, 0);
-        ctx.restore();
-      }
-      if (i < words.length - 1) {
-        const a = span(beat, at[i] + 0.5, 0.3, ease.expoOut);
-        ctx.globalAlpha = a;
-        ctx.font = `900 60px ${JP}`;
-        ctx.fillStyle = BRAND.red;
-        ctx.fillText('↓', cx, wy + 90 - (1 - a) * 30);
-        ctx.globalAlpha = 1;
-      }
-    });
-    const tag = span(beat, taglineAt, 0.5, ease.expoOut);
-    ctx.globalAlpha = tag;
-    ctx.font = `900 46px ${JP}`;
-    ctx.fillStyle = BRAND.yellow;
-    ctx.fillText(tagline, cx, 860 + (1 - tag) * 30);
-    ctx.restore();
-  },
-
-  // ---------- part 2: the four asks ----------
+  // ---------- the asks ----------
 
   drawCard(ctx, beat, cue, card, i) {
     const inn = span(beat, card.appear, 0.5, ease.expoOut);
