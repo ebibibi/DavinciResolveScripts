@@ -51,13 +51,24 @@ It renders to `EBI_CHAN_OUTRO.mp4` (about 11 minutes: 1,200 frames x 10 blur sam
 
 The Resolve editing scripts append this card after `03_EBI_CHAN_IN.mov` at the end of
 every edit, using the copy in `!動画素材` if there is one and otherwise the bundled
-`assets/EBI_CHAN_OUTRO.mp4`. **After re-rendering the end card, refresh
-`assets/EBI_CHAN_OUTRO.mp4` too**, re-encoded so the repository stays small:
+`assets/EBI_CHAN_OUTRO.mp4`. They also import the end card and all ten stingers into
+the Media Pool bin `EBI アイキャッチ`, from `!動画素材` or the bundled
+`assets/eyecatch/EBI_CHAN_EYECATCH_<variant>.mp4`.
+
+**After re-rendering, refresh the bundled copies too**, re-encoded so the repository
+stays small (about 10 MB for the end card, 0.6 to 2 MB per stinger):
 
 ```bash
 ffmpeg -i tools/eyecatch/out/EBI_CHAN_OUTRO.mp4 -c:v libx264 -preset slow -crf 20 \
   -pix_fmt yuv420p -r 60 -c:a copy -movflags +faststart assets/EBI_CHAN_OUTRO.mp4
+for f in tools/eyecatch/out/EBI_CHAN_EYECATCH_*.mp4; do
+  ffmpeg -i "$f" -c:v libx264 -preset slow -crf 20 -pix_fmt yuv420p -r 60 \
+    -c:a copy -movflags +faststart "assets/eyecatch/$(basename "$f")"
+done
 ```
+
+A new variant also has to be added to `EYECATCH_VARIANTS` in `ending_media.py`
+(a test checks that it matches `timeline.json`).
 
 A variant can set its own `beats`, `hitBeat` and `output` name in `timeline.json`;
 anything it leaves out comes from the top level.
