@@ -144,11 +144,11 @@
       ]
     },
     "outro": {
-      "title": "End card: the channel's range, then like / subscribe / join",
+      "title": "End card fitted to the channel's 20-second end-screen layout",
       "kind": "outro",
       "output": "EBI_CHAN_OUTRO",
       "sound": "outro_music",
-      "beats": 20,
+      "beats": 40,
       "hitBeat": 8,
       "riser": [
         6,
@@ -202,27 +202,62 @@
         {
           "label": "高評価",
           "icon": "👍",
-          "note": "参考になったら",
+          "note": "役に立ったら「いいね」をお願いします",
           "appear": 8.5,
           "click": 9.5
         },
         {
-          "label": "チャンネル登録",
+          "label": "チャンネル登録・通知オン",
           "icon": "🔔",
-          "note": "新しい動画をお届けします",
+          "note": "登録＋ベルマークで新着を見逃さない",
           "appear": 10.5,
           "click": 11.5
         },
         {
-          "label": "メンバーになる",
+          "label": "メンバーシップ",
           "icon": "⭐",
-          "note": "メンバー限定動画も配信中",
+          "note": "限定動画・1対1で質問できるプランあり",
+          "link": "動画の下の「メンバーになる」から",
+          "badge": "おすすめ",
           "appear": 12.5,
           "click": 13.5
         }
       ],
-      "thanksAt": 15.5,
-      "endAt": 18
+      "thanksAt": 32,
+      "endAt": 38,
+      "endScreen": {
+        "_note": "Where YouTube draws the end-screen elements (1920x1080). Kept as framed slots.",
+        "videos": [
+          [
+            30,
+            125,
+            650,
+            375
+          ],
+          [
+            30,
+            545,
+            650,
+            380
+          ]
+        ],
+        "subscribe": [
+          1545,
+          705,
+          335,
+          220
+        ]
+      },
+      "breakdown": [
+        24,
+        32
+      ],
+      "glowOrder": [
+        2,
+        0,
+        2,
+        1
+      ]
     }
   }
 }

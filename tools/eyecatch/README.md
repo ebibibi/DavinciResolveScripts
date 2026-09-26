@@ -19,21 +19,25 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 
 ## End card (`outro`)
 
-A 10-second (20-beat) card for the end of every video, written to never go
-stale (no dates, counts or titles):
+A 20-second (40-beat) card built around the channel's YouTube end screen, which
+is imported onto every video: two video elements stacked on the left and a
+subscribe element at the bottom right, shown for the last 20 seconds. Those
+regions are listed in `endScreen` in `timeline.json` and drawn as framed slots,
+so YouTube's elements sit inside them; all content uses the space in between.
+If the end-screen layout ever changes, update those rectangles.
 
-1. **Beats 0–8 — the range.** Topic chips scroll in three rows (infrastructure,
-   cloud / Microsoft 365, AI) while オンプレ → クラウド → 生成AI slams in one
-   word per beat, then "ぜんぶ、ここで解説します". The chips speed up into the wipe.
-2. **Beats 8–18 — the ask.** A diagonal wipe to yellow; 高評価, チャンネル登録 and
-   メンバーになる cards slide in, and a pointer clicks each one on the beat
-   (thumb jumps and +1, bell rings and turns into 登録済み, star spins and sparkles).
-3. **Beats 18–20 — the end.** The logo pulses once over a final chord.
+1. **Beats 0–8 — the range.** In the centre panel オンプレ ↓ クラウド ↓ 生成AI
+   lands one word per beat, then "ぜんぶ、ここで解説します".
+2. **Beats 8–18 — the ask.** The panel flies off; 高評価, チャンネル登録・通知オン
+   and メンバーシップ (tagged おすすめ) slide in and a pointer clicks each on the beat.
+3. **Beats 18–38 — hold without going stale.** The cards take turns to glow, the
+   YouTube membership card twice as often (`glowOrder`); the music drops into a
+   breakdown and comes back. Thanks appears under the logo on beat 32.
+4. **Beats 38–40 — the end.** The logo pulses over a final chord.
 
-The music is a small club track in A (A – F#m – D – E – A) with a mouse click and
-a reward sound for each card. Copy, topics and timing all live under
-`variants.outro` in `timeline.json`, so changing a word does not need code.
-It renders to `EBI_CHAN_OUTRO.mp4` (about 5 minutes: 600 frames x 10 blur samples).
+Topic chips scroll along the top and bottom edges the whole time. Nothing is
+dated, and copy, topics and timing are data under `variants.outro`. It renders
+to `EBI_CHAN_OUTRO.mp4` (about 11 minutes: 1,200 frames x 10 blur samples).
 
 A variant can set its own `beats`, `hitBeat` and `output` name in `timeline.json`;
 anything it leaves out comes from the top level.

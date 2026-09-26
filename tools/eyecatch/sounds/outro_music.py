@@ -19,8 +19,9 @@ from synth import (
     times,
 )
 
-# One chord per bar of four beats: A, F#m, D, E, then home to A.
-BARS = ((45, (57, 61, 64)), (42, (57, 61, 66)), (38, (57, 62, 66)), (40, (56, 59, 64)), (45, (57, 61, 64)))
+# One chord per bar of four beats, cycling A, F#m, D, E; the last bar lands on A.
+PROGRESSION = ((45, (57, 61, 64)), (42, (57, 61, 66)), (38, (57, 62, 66)), (40, (56, 59, 64)))
+HOME = PROGRESSION[0]
 
 
 def pluck(midi: float, length_s: float = 0.2, shape: str = "triangle") -> np.ndarray:
@@ -42,35 +43,47 @@ def bell(midi: float, length_s: float = 1.0) -> np.ndarray:
 
 
 def design(cue: Cue) -> Mix:
-    """outro: a short, loopable-feeling club track with UI sounds on every click."""
+    """outro: a small club track with a breakdown, and UI sounds on every click."""
     mix = Mix(cue.total_s)
     s = cue.seconds
     end = cue.spec["endAt"]
     gap_from = cue.hit_beat - cue.silence_before_hit * cue.bpm / 60
+    calm_from, calm_to = cue.spec["breakdown"]
 
-    kicks = [float(b) for b in range(int(end)) if not (gap_from <= b < cue.hit_beat)]
+    def calm(b: float) -> bool:
+        return calm_from <= b < calm_to
+
+    # In the breakdown the kick only marks each bar, so the return feels like a lift.
+    kicks = [
+        float(b) for b in range(int(end))
+        if not (gap_from <= b < cue.hit_beat) and (not calm(b) or b % 4 == 0)
+    ]
     for b in kicks:
         mix.add(kick(0.3, 140, 48), s(b), 0.8)
     for b in np.arange(0.5, end, 1.0):
-        mix.add(hat(int(b * 10), 0.05), s(b), 0.18, 0.3)
-    for b in range(5, int(end), 2):  # claps on 2 and 4, once the intro bar is over
+        mix.add(hat(int(b * 10), 0.05), s(b), 0.1 if calm(b) else 0.18, 0.3)
+    for b in (b for b in range(5, int(end), 2) if not calm(b)):  # claps on 2 and 4 after the intro bar
         for k in range(3):
             mix.add(highpass(noise(0.1, 200 + b * 3 + k), 0.8) * decay(0.1, 28), s(b) + 0.007 * k, 0.22)
 
     music = Mix(cue.total_s)
-    for bar, (root, chord) in enumerate(BARS):
+    for bar in range(int(np.ceil(cue.beats / 4))):
         start = bar * 4
         if start >= end:
             continue
         final = start >= end - 2
+        root, chord = HOME if final else PROGRESSION[bar % len(PROGRESSION)]
         for eighth in range(8 if not final else 1):
             b = start + eighth * 0.5
             if b >= end or gap_from <= b < cue.hit_beat:
                 continue
             octave = 12 if eighth % 2 else 0
+            if calm(b) and eighth % 2:
+                continue
             music.add(lowpass(osc(note(root + octave), 0.22, "saw"), 0.08) * decay(0.22, 9, 0.003), s(b), 0.5)
-        arp_gain = 0.16 if start < cue.hit_beat else 0.09
-        tones = [m + 12 for m in chord] + [chord[0] + 24]
+        arp_gain = 0.16 if start < cue.hit_beat or calm(start) else 0.09
+        # The breakdown lifts the arpeggio an octave so the section sounds new.
+        tones = [m + (24 if calm(start) else 12) for m in chord] + [chord[0] + 24]
         for step in range(16):
             b = start + step * 0.25
             if b >= end or gap_from <= b < cue.hit_beat:
@@ -109,6 +122,19 @@ def design(cue: Cue) -> Mix:
         else:  # join: a run of sparkles
             for k, m in enumerate((88, 92, 95, 100, 104)):
                 mix.add(osc(note(m), 0.3) * decay(0.3, 12), at + 0.01 + k * 0.045, 0.16, -0.6 + 0.3 * k)
+
+    # Into and out of the breakdown: a riser back to the full beat.
+    back_len = s(2)
+    mix.add(riser(back_len, 23), s(calm_to) - back_len, 0.3)
+    mix.add(crash(1.2, 25), s(calm_to), 0.25)
+
+    # After the clicks the cards glow in turn every two beats; each glow gets a soft chime.
+    first_glow = cue.spec["cta"][-1]["click"] + 1.5
+    order = cue.spec["glowOrder"]
+    for k, b in enumerate(np.arange(first_glow, end, 2.0)):
+        # The recommended card's turn gets a brighter chime than the others.
+        star = order[k % len(order)] == len(cue.spec["cta"]) - 1
+        mix.add(bell(93 if star else 85, 0.6), s(b), 0.1 if star else 0.06, (-0.3, 0.3)[k % 2])
 
     # The ending: one big chord that rings out.
     tail = cue.total_s - s(end)
