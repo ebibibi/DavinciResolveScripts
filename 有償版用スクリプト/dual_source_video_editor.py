@@ -40,6 +40,7 @@ from ending_media import (  # noqa: E402
     material_candidates,
     outro_candidates,
 )
+from media_pool_clips import ensure_generated_clips  # noqa: E402
 
 TEMPLATE_NAME = "テンプレート.drp"
 CUT_LIST_NAME = "_auto_editor_cuts.json"
@@ -546,6 +547,8 @@ def main(argv=None) -> int:
         if not media_pool:
             print("✗ MediaPool取得失敗")
             return 1
+        # アイキャッチとエンドカードをビンに用意する（失敗しても続行）
+        ensure_generated_clips(media_pool)
         timeline = resolve_session.open_main_timeline(project)
     except resolve_session.ResolveSessionError as error:
         print(f"✗ {error}")

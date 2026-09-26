@@ -24,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from auto_editor_config import load_auto_editor_config  # noqa: E402
 from ending_media import find_outro_video, first_existing_path  # noqa: E402
+from media_pool_clips import ensure_generated_clips  # noqa: E402
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 
@@ -338,6 +339,9 @@ def main():
     if not media_pool:
         print("✗ MediaPool取得失敗")
         sys.exit(1)
+
+    # アイキャッチとエンドカードをビンに用意する（失敗しても続行）
+    ensure_generated_clips(media_pool)
 
     # mainタイムラインを探す
     main_timeline = None
