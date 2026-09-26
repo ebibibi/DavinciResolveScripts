@@ -3,6 +3,7 @@
 Ten two-second branded stingers (1920x1080, 60 fps, stereo 48 kHz) for chapter
 breaks, rendered entirely from code. They sit alongside the three hand-made
 clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
+`01_EBI_CHAN_OP` is no longer part of the Resolve template.
 
 | Variant | Picture | Sound |
 |---|---|---|
@@ -47,6 +48,16 @@ on the beat; thanks appears under the logo on beat 34 and the logo pulses on the
 chord at beat 38.
 
 It renders to `EBI_CHAN_OUTRO.mp4` (about 11 minutes: 1,200 frames x 10 blur samples).
+
+The Resolve editing scripts append this card after `03_EBI_CHAN_IN.mov` at the end of
+every edit, using the copy in `!動画素材` if there is one and otherwise the bundled
+`assets/EBI_CHAN_OUTRO.mp4`. **After re-rendering the end card, refresh
+`assets/EBI_CHAN_OUTRO.mp4` too**, re-encoded so the repository stays small:
+
+```bash
+ffmpeg -i tools/eyecatch/out/EBI_CHAN_OUTRO.mp4 -c:v libx264 -preset slow -crf 20 \
+  -pix_fmt yuv420p -r 60 -c:a copy -movflags +faststart assets/EBI_CHAN_OUTRO.mp4
+```
 
 A variant can set its own `beats`, `hitBeat` and `output` name in `timeline.json`;
 anything it leaves out comes from the top level.

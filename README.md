@@ -25,6 +25,24 @@ launchers also install them in the current user's Fusion Titles library, while
 preserving locally customized files. Choose a title and edit its text in the
 Inspector. See the [catalog, installation guide and validation status](title_presets/README.md).
 
+## Template timeline and ending
+
+The `main` timeline of both `テンプレート.drp` files no longer starts with the
+opening clip `01_EBI_CHAN_OP.mov`: a different opening is used now. It keeps the
+`MasahikoEbisuda_MicrosoftMVP.mov` overlay (and the BGM item) layered at the
+start, and the edited body starts at the beginning of the timeline. An opening
+clip placed on V1 by hand is still honoured: the body then starts after it.
+
+Every Resolve route (stable, dual source and free) ends the video with:
+
+```text
+body -> 03_EBI_CHAN_IN.mov -> EBI_CHAN_OUTRO.mp4 (20-second end card)
+```
+
+The end card is taken from the OneDrive `!動画素材` folder when it is there, and
+otherwise from the copy bundled at `assets/EBI_CHAN_OUTRO.mp4`. See
+[ADR-017](docs/adr/017-drop-the-template-opening-and-append-the-end-card.md).
+
 ## Eyecatch stingers
 
 New branded two-second stingers can be rendered from code, synchronised to the
@@ -41,8 +59,8 @@ DaVinci Resolve process:
 4. Use `auto-editor` to remove silence with the values from
    `有償版用スクリプト/config.json`
    (default: `audio:threshold=3%` and `--margin 0.3sec`).
-5. Import the generated timeline and combine it with the template timeline and
-   ending clip.
+5. Append the ending clip and the end card to the generated timeline, then add
+   it to the template's `main` timeline from its start.
 
 Use this route when the instruction is effectively “do nothing extra.”
 
@@ -62,7 +80,8 @@ lecture recorded as two files in one folder, for example `!OBS録画/az900-3/`:
 5. Apply the camera and slide placement measured from the AZ-900 project.
    The timeline, the two recordings and the cut list may all run at different
    frame rates, so the plan is computed in seconds and converted per track.
-6. Append the template's ending clip after the last segment.
+6. Append the ending clip after the last segment, then the end card (picture
+   on V1, sound on A1).
 
 The folder can also be given explicitly:
 
