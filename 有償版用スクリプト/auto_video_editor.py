@@ -5,7 +5,7 @@
 DaVinci Resolve自動動画編集スクリプト（有償版）
 - テンプレートプロジェクトから新規プロジェクトを作成
 - auto-editorで無音部分を自動カット
-- エンディング動画を自動追加
+- エンディング動画とエンドカードを自動追加
 - mainタイムラインに統合
 """
 
@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from auto_editor_config import load_auto_editor_config  # noqa: E402
+from ending_media import find_outro_video, first_existing_path  # noqa: E402
 
 print("DaVinci Resolve自動動画編集スクリプト（有償版）開始")
 
@@ -241,6 +242,42 @@ def append_clips_with_retry(media_pool, clips_to_append, max_retries=3, delay=2)
     print(f"✗ {max_retries}回の試行すべてが失敗しました")
     return False
 
+def append_closing_clip(media_pool, path, label):
+    """クリップを現在のタイムラインの末尾に追加する（映像と音声の両方）"""
+    print(f"✓ {label}: {path}")
+    clips = media_pool.ImportMedia([path])
+    if not clips:
+        print(f"✗ {label}のインポートに失敗")
+        return False
+
+    clip = clips[0]
+    print(f"✓ {label}クリップインポート: {clip.GetName()}")
+    try:
+        frames = int(clip.GetClipProperty('Frames'))
+        appended = media_pool.AppendToTimeline([{
+            'mediaPoolItem': clip,
+            'startFrame': 0,
+            'endFrame': frames
+        }])
+    except Exception as e:
+        print(f"✗ {label}追加エラー: {e}")
+        return False
+
+    if not appended:
+        print(f"✗ {label}の追加に失敗")
+        return False
+    print(f"✓ {label}をXMLタイムラインに追加しました")
+    return True
+
+
+def timeline_start_frame(timeline):
+    """タイムラインの先頭フレーム（通常は 01:00:00:00 に当たる値）。読めなければ0"""
+    try:
+        return int(timeline.GetStartFrame())
+    except Exception:
+        return 0
+
+
 def main():
     # APIパスの設定
     add_resolve_api_to_sys_path()
@@ -361,40 +398,24 @@ def main():
 
     print(f"✓ XMLタイムラインインポート成功: {xml_timeline.GetName()}")
 
-    # エンディング動画をXMLタイムラインに追加
+    # XMLタイムラインの末尾に エンディング動画（03）→ エンドカード の順で追加
     ending_video_paths = [
         r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
         r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov'
     ]
 
-    ending_video_path = next((path for path in ending_video_paths if os.path.exists(path)), None)
+    project.SetCurrentTimeline(xml_timeline)
+    ending_video_path = first_existing_path(ending_video_paths)
     if ending_video_path:
-        print(f"✓ エンディング動画: {ending_video_path}")
-
-        # エンディング動画をインポート
-        ending_clips = media_pool.ImportMedia([ending_video_path])
-        if ending_clips:
-            ending_clip = ending_clips[0]
-            print(f"✓ エンディングクリップインポート: {ending_clip.GetName()}")
-
-            # XMLタイムラインをアクティブにしてエンディング動画を追加
-            project.SetCurrentTimeline(xml_timeline)
-            try:
-                ending_frames = int(ending_clip.GetClipProperty('Frames'))
-                append_result = media_pool.AppendToTimeline([{
-                    'mediaPoolItem': ending_clip,
-                    'startFrame': 0,
-                    'endFrame': ending_frames
-                }])
-
-                if append_result:
-                    print("✓ エンディング動画をXMLタイムラインに追加しました")
-                else:
-                    print("✗ エンディング動画の追加に失敗")
-            except Exception as e:
-                print(f"✗ エンディング動画追加エラー: {e}")
+        append_closing_clip(media_pool, ending_video_path, "エンディング動画")
     else:
         print("! エンディング動画が見つかりません（スキップ）")
+
+    outro_video_path = find_outro_video()
+    if outro_video_path:
+        append_closing_clip(media_pool, outro_video_path, "エンドカード")
+    else:
+        print("! エンドカードが見つかりません（スキップ）")
 
     # mainタイムラインをアクティブにする
     print("mainタイムラインをアクティブにします")
@@ -433,8 +454,9 @@ def main():
         op_clip_found = False
 
     if not op_clip_found:
-        print(f"V{video_track}トラックにオープニングクリップが見つかりません。タイムラインの先頭に配置します。")
-        start_frame = 0
+        # テンプレートからオープニングは外したので、通常はここを通る
+        start_frame = timeline_start_frame(main_timeline)
+        print(f"V{video_track}トラックにオープニングクリップはありません。タイムラインの先頭（{start_frame}）に配置します。")
 
     # XMLタイムラインの内容をmainタイムラインに挿入
     print("XMLタイムラインの内容をmainタイムラインに挿入します")

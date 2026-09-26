@@ -4,7 +4,7 @@
 """
 DaVinci Resolve自動動画編集スクリプト（無料版）
 - auto-editorで無音部分を自動カット
-- エンディング動画を自動追加
+- エンディング動画とエンドカードを自動追加
 - 既存プロジェクトのタイムラインに統合
 """
 
@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from auto_editor_config import load_auto_editor_config  # noqa: E402
+from ending_media import find_outro_video, first_existing_path  # noqa: E402
 
 print("DaVinci Resolve自動動画編集スクリプト（無料版）開始")
 
@@ -77,13 +78,20 @@ ending_video_paths = [
 ]
 print(f"エンディング動画パス候補: {ending_video_paths}")
 
-ending_video_path = next((path for path in ending_video_paths if os.path.exists(path)), None)
+ending_video_path = first_existing_path(ending_video_paths)
 
 if ending_video_path is None:
     print("いずれのエンディング動画も存在しません。終了します。")
     sys.exit(1)
 
 print(f"選択されたエンディング動画: {ending_video_path}")
+
+# エンドカード（OneDriveに無ければリポジトリ同梱版）
+outro_video_path = find_outro_video()
+if outro_video_path is None:
+    print("エンドカードが見つかりません。エンドカードなしで続行します。")
+else:
+    print(f"選択されたエンドカード: {outro_video_path}")
 
 ## Davinci Resolve API
 print("Resolveオブジェクトを取得します")
@@ -162,6 +170,23 @@ if not append_result:
     print("エンディング動画の追加に失敗しました。")
     sys.exit(1)
 
+# エンディング動画の後ろにエンドカードを追加（失敗しても本編の編集は続ける）
+if outro_video_path is not None:
+    print("タイムラインにエンドカードを追加します")
+    try:
+        outro_clip = media_pool.ImportMedia([outro_video_path])[0]
+        outro_clip_frames = int(outro_clip.GetClipProperty('Frames'))
+        if media_pool.AppendToTimeline([{
+            'mediaPoolItem': outro_clip,
+            'startFrame': 0,
+            'endFrame': outro_clip_frames
+        }]):
+            print("エンドカードを追加しました。")
+        else:
+            print("エンドカードの追加に失敗しました（エンドカードなしで続行）。")
+    except Exception as e:
+        print(f"エンドカードを追加できません（エンドカードなしで続行）: {str(e)}")
+
 print("最新XMLのタイムライン作成とエンディング追加が完了しました。")
 
 
@@ -220,14 +245,11 @@ except Exception as e:
     op_clip_found = False
 
 if not op_clip_found:
-    print(f"V{video_track}トラックにオープニングクリップが見つかりません。タイムラインの先頭に貼り付けます。")
-    # タイムラインのスタートフレームを取得
+    # テンプレートからオープニングは外したので、通常はここを通る
+    print(f"V{video_track}トラックにオープニングクリップはありません。タイムラインの先頭に貼り付けます。")
     try:
-        start_timecode = main_timeline.GetStartTimecode()
-        print(f"タイムラインの開始タイムコード: {start_timecode}")
-        # タイムコードをフレーム番号に変換（必要に応じて）
-        # ここでは簡易的に0を設定
-        start_frame = 0
+        start_frame = int(main_timeline.GetStartFrame())
+        print(f"タイムラインの開始フレーム: {start_frame}")
     except Exception as e:
         print(f"タイムラインの開始フレーム取得でエラー: {str(e)}")
         start_frame = 0

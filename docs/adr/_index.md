@@ -17,3 +17,4 @@
 - [ADR-015: Edit the whole video in code instead of an NLE](015-edit-the-whole-video-in-code-instead-of-an-nle.md) — Build one edit decision list from the transcript and render highlights, chapter cards, telops, captions and sound effects with a single FFmpeg command. (accepted, 2026-08-04)
 
 - [ADR-016: Editable title presets](016-bundle-editable-title-presets.md) — Twelve bundled Fusion titles with non-destructive installation (accepted, 2026-09-06).
+- [ADR-017: Drop the template opening and append the end card](017-drop-the-template-opening-and-append-the-end-card.md) — The body starts the timeline; every Resolve route appends the end card after the ending clip (accepted, 2026-09-26).

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import ending_media
 from auto_editor_config import AutoEditorConfig
 
 SCRIPT_DIR = Path(__file__).parents[1] / "有償版用スクリプト"
@@ -73,11 +74,17 @@ class FakeMediaPoolItem:
 
 
 class FakeTimeline:
-    def __init__(self, items: list[FakeItem], video_tracks: int = 1):
+    def __init__(
+        self, items: list[FakeItem], video_tracks: int = 1, start_frame: int = 0
+    ):
         self._items = items
         self.video_tracks = video_tracks
         self.timecode = None
         self.frame_rate = FRAME_RATE
+        self.start_frame = start_frame
+
+    def GetStartFrame(self) -> int:
+        return self.start_frame
 
     def GetItemsInTrack(self, track_type: str, index: int) -> dict:
         return {i: item for i, item in enumerate(self._items)}
@@ -179,14 +186,29 @@ def stub_pipeline(monkeypatch):
     monkeypatch.setattr(EDITOR, "first_existing_path", lambda candidates: None)
 
 
-def test_the_opening_clip_end_becomes_the_insert_point():
+def test_an_opening_clip_placed_by_hand_still_becomes_the_insert_point():
     timeline = FakeTimeline([FakeItem("01_EBI_CHAN_OP.mov", end=300)])
 
     assert EDITOR.find_opening_end_frame(timeline) == 300
 
 
-def test_a_timeline_without_an_opening_clip_starts_at_zero():
-    timeline = FakeTimeline([FakeItem("something else.mov", end=300)])
+def test_the_template_without_an_opening_clip_starts_at_the_timeline_start():
+    """The template no longer carries an opening; the body starts the video.
+
+    Resolve counts record frames from 00:00:00:00 while the timeline itself
+    usually starts at 01:00:00:00, so "the start" is the timeline's start frame.
+    """
+    timeline = FakeTimeline([], start_frame=216000)
+
+    assert EDITOR.find_opening_end_frame(timeline) == 216000
+
+
+def test_an_unreadable_timeline_start_falls_back_to_zero():
+    class NoStartFrame(FakeTimeline):
+        def GetStartFrame(self):
+            raise AttributeError("GetStartFrame")
+
+    timeline = NoStartFrame([FakeItem("something else.mov", end=300)])
 
     assert EDITOR.find_opening_end_frame(timeline) == 0
 
@@ -200,9 +222,12 @@ def test_the_camera_track_is_created_when_the_template_has_only_v1():
 
 def test_the_dual_route_places_both_tracks_and_sizes_the_camera(pair, stub_pipeline):
     media_pool = FakeMediaPool({"PPT.mkv": 100000, "camera.mp4": 100000})
-    timeline = FakeTimeline([FakeItem("01_EBI_CHAN_OP.mov", end=300)])
+    timeline = FakeTimeline([], start_frame=300)
+    start_frame = EDITOR.find_opening_end_frame(timeline)
 
-    assert EDITOR.build_dual_source_timeline(FakeProject(), media_pool, timeline, pair, 300)
+    assert EDITOR.build_dual_source_timeline(
+        FakeProject(), media_pool, timeline, pair, start_frame
+    )
 
     clip_infos = media_pool.appended[0]
     slides = [c for c in clip_infos if c["trackIndex"] == 1 and c["mediaType"] == 1]
@@ -565,3 +590,92 @@ def test_the_shipped_threshold_passes_without_a_warning(capsys):
 
     assert not warned
     assert capsys.readouterr().out == ""
+
+
+class PlacedMediaPool(FakeMediaPool):
+    """Returns timeline items whose end is where Resolve would put it."""
+
+    def AppendToTimeline(self, clip_infos):
+        self.appended.append(clip_infos)
+        return [
+            FakeItem(
+                c["mediaPoolItem"].GetName(),
+                end=c["recordFrame"] + c["endFrame"] - c["startFrame"],
+            )
+            for c in clip_infos
+        ]
+
+
+def closing_media(monkeypatch, tmp_path, with_ending=True):
+    ending = tmp_path / "03_EBI_CHAN_IN.mov"
+    outro = tmp_path / "EBI_CHAN_OUTRO.mp4"
+    ending.write_bytes(b"")
+    outro.write_bytes(b"")
+    monkeypatch.setattr(
+        EDITOR,
+        "ENDING_VIDEO_CANDIDATES",
+        [str(ending)] if with_ending else [str(tmp_path / "missing.mov")],
+    )
+    monkeypatch.setattr(EDITOR, "OUTRO_VIDEO_CANDIDATES", [str(outro)])
+    return PlacedMediaPool(
+        {"03_EBI_CHAN_IN.mov": 240, "EBI_CHAN_OUTRO.mp4": 1200}
+    )
+
+
+def test_the_end_card_follows_the_ending_clip(monkeypatch, tmp_path):
+    media_pool = closing_media(monkeypatch, tmp_path)
+
+    end = EDITOR.append_ending_videos(media_pool, 5000, FRAME_RATE)
+
+    ending, outro = media_pool.appended
+    assert [c["mediaPoolItem"].GetName() for c in ending] == ["03_EBI_CHAN_IN.mov"]
+    assert ending[0]["recordFrame"] == 5000
+    # The ending clip keeps its old placement: picture only, on V1.
+    assert (ending[0]["mediaType"], ending[0]["trackIndex"]) == (1, 1)
+    # The end card starts where the ending clip stops and brings its music.
+    assert {c["mediaPoolItem"].GetName() for c in outro} == {"EBI_CHAN_OUTRO.mp4"}
+    assert {c["recordFrame"] for c in outro} == {5240}
+    assert sorted((c["mediaType"], c["trackIndex"]) for c in outro) == [(1, 1), (2, 1)]
+    assert {c["endFrame"] for c in outro} == {1200}
+    assert end == 6440
+
+
+def test_the_end_card_is_still_appended_without_the_ending_clip(monkeypatch, tmp_path):
+    media_pool = closing_media(monkeypatch, tmp_path, with_ending=False)
+
+    EDITOR.append_ending_videos(media_pool, 5000, FRAME_RATE)
+
+    (outro,) = media_pool.appended
+    assert {c["mediaPoolItem"].GetName() for c in outro} == {"EBI_CHAN_OUTRO.mp4"}
+    assert {c["recordFrame"] for c in outro} == {5000}
+
+
+def test_the_end_card_position_is_counted_when_resolve_reports_no_end(monkeypatch, tmp_path):
+    """A 30 fps ending clip covers twice as many frames of a 60 fps timeline."""
+    media_pool = closing_media(monkeypatch, tmp_path)
+    media_pool.frame_rates = {"03_EBI_CHAN_IN.mov": 30.0}
+    media_pool.AppendToTimeline = lambda infos: media_pool.appended.append(infos) or [
+        FakeItem("placed") for _ in infos
+    ]
+
+    EDITOR.append_ending_videos(media_pool, 1000, 60.0)
+
+    outro = media_pool.appended[1]
+    assert {c["recordFrame"] for c in outro} == {1000 + 240 * 2}
+
+
+def test_the_dual_route_ends_with_the_ending_clip_then_the_end_card(
+    pair, stub_pipeline, monkeypatch, tmp_path
+):
+    media_pool = closing_media(monkeypatch, tmp_path)
+    media_pool.frames_by_name.update({"PPT.mkv": 100000, "camera.mp4": 100000})
+    monkeypatch.setattr(EDITOR, "first_existing_path", ending_media.first_existing_path)
+
+    assert EDITOR.build_dual_source_timeline(
+        FakeProject(), media_pool, FakeTimeline([]), pair, 0
+    )
+
+    body, ending, outro = media_pool.appended
+    body_end = max(c["recordFrame"] + c["endFrame"] - c["startFrame"] for c in body)
+    assert ending[0]["recordFrame"] == body_end
+    assert {c["recordFrame"] for c in outro} == {body_end + 240}
