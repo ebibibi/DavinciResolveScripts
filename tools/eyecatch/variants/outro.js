@@ -7,6 +7,8 @@ const JP = '"Noto Sans CJK JP", sans-serif';
 const EMOJI = '"Noto Color Emoji", sans-serif';
 const CENTER = { x: 700, y: 125, w: 815, h: 800 };
 const SIDE = { x: 1545, w: 335 };
+// The logo and name sit above the subscribe slot, which YouTube fills with a large button.
+const LOGO_Y = 265;
 const CARD_H = 240;
 const CARD_GAP = 40;
 
@@ -109,9 +111,9 @@ variants.outro = {
     const inn = span(local, 0.3, 0.6, ease.backOut);
     const pulse = beat >= cue.endAt ? 1 + 0.1 * Math.exp(-(beat - cue.endAt) * 6) : 1;
     const bob = Math.sin(beat * Math.PI) * 6;
-    const h = 400 * inn * pulse;
+    const h = 330 * inn * pulse;
     const w = h * (logo.width / logo.height);
-    if (h > 0) ctx.drawImage(logo, cx - w / 2, 320 - h / 2 + bob, w, h);
+    if (h > 0) ctx.drawImage(logo, cx - w / 2, LOGO_Y - h / 2 + bob, w, h);
     if (beat >= cue.endAt) {
       const p = span(beat, cue.endAt, 0.8, ease.expoOut);
       ctx.save();
@@ -119,7 +121,7 @@ variants.outro = {
       ctx.globalAlpha = 1 - p;
       ctx.lineWidth = lerp(24, 2, p);
       ctx.beginPath();
-      ctx.arc(cx, 320, lerp(150, 380, p), 0, Math.PI * 2);
+      ctx.arc(cx, LOGO_Y, lerp(130, 330, p), 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -130,13 +132,13 @@ variants.outro = {
     ctx.fillStyle = BRAND.ink;
     ctx.globalAlpha = span(local, 0.8, 0.5) * (1 - thanks);
     ctx.font = `900 40px ${JP}`;
-    ctx.fillText('胡田昌彦', cx, 580);
+    ctx.fillText('胡田昌彦', cx, 476);
     ctx.font = `700 21px ${JP}`;
-    ctx.fillText('Windows / Azure / M365 / 生成AI', cx, 618);
+    ctx.fillText('Windows / Azure / M365 / 生成AI', cx, 512);
     ctx.globalAlpha = thanks;
     ctx.font = `900 27px ${JP}`;
-    ctx.fillText('ご視聴', cx, 575 + (1 - thanks) * 20);
-    ctx.fillText('ありがとうございました！', cx, 622 + (1 - thanks) * 20);
+    ctx.fillText('ご視聴', cx, 468 + (1 - thanks) * 20);
+    ctx.fillText('ありがとうございました！', cx, 508 + (1 - thanks) * 20);
     ctx.restore();
   },
 
