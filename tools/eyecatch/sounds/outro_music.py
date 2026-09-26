@@ -42,6 +42,53 @@ def bell(midi: float, length_s: float = 1.0) -> np.ndarray:
     return sum(osc(note(midi) * r, length_s) * g for r, g in parts) * decay(length_s, 4, 0.002)
 
 
+def thump(length_s: float = 0.3) -> np.ndarray:
+    return osc(90 + 120 * np.exp(-times(length_s) * 25), length_s) * decay(length_s, 10)
+
+
+def whoosh(length_s: float, seed: int) -> np.ndarray:
+    ramp = np.sin(np.linspace(0, np.pi, int(48_000 * length_s)))
+    return highpass(noise(length_s, seed), 0.6 + 0.3 * ramp) * ramp
+
+
+def _showcase(mix: Mix, cue: Cue) -> None:
+    """Sounds for the full-screen half, placed from the same promo timing as the picture."""
+    s = cue.seconds
+    promo = cue.spec["promo"]
+    mvp = promo["mvp"]
+    # The MVP counter ticks up the scale once per year, then lands with a fanfare.
+    years = mvp["years"]
+    for k in range(1, years):
+        progress = k / (years - 1)
+        at = mvp["countFrom"] + (mvp["countTo"] - mvp["countFrom"]) * progress
+        mix.add(osc(note(69 + k), 0.06, "square") * decay(0.06, 40), s(at) - 0.03, 0.08)
+    land = s(mvp["countTo"])
+    mix.add(kick(0.5, 170, 42), land, 0.9)
+    mix.add(crash(1.2, 31), land, 0.3)
+    fanfare = lowpass(supersaw((57, 61, 64, 69), 1.2, "saw"), 0.1) * decay(1.2, 2.5, 0.01)
+    mix.add(fanfare, land, 0.6)
+
+    for scene in ("range", "stats", "identity"):  # the yellow sweep between scenes
+        mix.add(whoosh(0.3, len(scene)), s(promo[scene]["at"]) - 0.2, 0.3, 0.4)
+
+    rng = promo["range"]
+    for at in rng["wordsAt"]:
+        mix.add(thump(), s(rng["at"] + at), 0.7)
+    mix.add(bell(93, 0.8), s(rng["at"] + rng["taglineAt"]), 0.12, 0.3)
+
+    stats = promo["stats"]
+    for i, at in enumerate(stats["tilesAt"]):
+        start = s(stats["at"] + at)
+        mix.add(thump(0.25), start, 0.5, (-0.4, 0.4)[i % 2])
+        if "value" in stats["tiles"][i]:  # a quick run of ticks while the number counts
+            for k in range(8):
+                mix.add(osc(note(84 + k), 0.03, "square") * decay(0.03, 60), start + 0.04 * k, 0.05)
+
+    who = promo["identity"]
+    mix.add(bell(81, 1.2), s(who["at"] + 0.4), 0.15, -0.3)
+    mix.add(bell(88, 1.0), s(who["at"] + 1.8), 0.12, 0.3)
+
+
 def design(cue: Cue) -> Mix:
     """outro: a small club track with a breakdown, and UI sounds on every click."""
     mix = Mix(cue.total_s)
@@ -95,10 +142,7 @@ def design(cue: Cue) -> Mix:
     music.duck([s(b) for b in kicks], 0.55)
     mix.bus += music.bus
 
-    # Part 1: a thump for each word, a shimmer for the tagline, a riser into the wipe.
-    for at in cue.spec["range"]["at"]:
-        mix.add(osc(90 + 120 * np.exp(-times(0.3) * 25), 0.3) * decay(0.3, 10), s(at), 0.7)
-    mix.add(bell(93, 0.8), s(cue.spec["range"]["taglineAt"]), 0.12, 0.3)
+    _showcase(mix, cue)
     rise_from, rise_to = (s(b) for b in cue.riser)
     mix.add(riser(rise_to - rise_from, 5), rise_from, 0.35)
 
@@ -122,11 +166,6 @@ def design(cue: Cue) -> Mix:
         else:  # join: a run of sparkles
             for k, m in enumerate((88, 92, 95, 100, 104)):
                 mix.add(osc(note(m), 0.3) * decay(0.3, 12), at + 0.01 + k * 0.045, 0.16, -0.6 + 0.3 * k)
-
-    # Into and out of the breakdown: a riser back to the full beat.
-    back_len = s(2)
-    mix.add(riser(back_len, 23), s(calm_to) - back_len, 0.3)
-    mix.add(crash(1.2, 25), s(calm_to), 0.25)
 
     # After the clicks the cards glow in turn every two beats; each glow gets a soft chime.
     first_glow = cue.spec["cta"][-1]["click"] + 1.5

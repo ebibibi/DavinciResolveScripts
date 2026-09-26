@@ -144,30 +144,16 @@
       ]
     },
     "outro": {
-      "title": "End card fitted to the channel's 20-second end-screen layout",
+      "title": "End card: full-screen channel showcase, then the end-screen layout",
       "kind": "outro",
       "output": "EBI_CHAN_OUTRO",
       "sound": "outro_music",
       "beats": 40,
-      "hitBeat": 8,
+      "hitBeat": 20,
       "riser": [
-        6,
-        7.8
+        17,
+        19.8
       ],
-      "range": {
-        "words": [
-          "オンプレ",
-          "クラウド",
-          "生成AI"
-        ],
-        "at": [
-          0.5,
-          1.5,
-          2.5
-        ],
-        "tagline": "ぜんぶ、ここで解説します",
-        "taglineAt": 3.5
-      },
       "topics": [
         [
           "Windows Server",
@@ -203,15 +189,15 @@
           "label": "高評価",
           "icon": "👍",
           "note": "役に立ったら「いいね」をお願いします",
-          "appear": 8.5,
-          "click": 9.5
+          "appear": 20.5,
+          "click": 21.5
         },
         {
           "label": "チャンネル登録・通知オン",
           "icon": "🔔",
           "note": "登録＋ベルマークで新着を見逃さない",
-          "appear": 10.5,
-          "click": 11.5
+          "appear": 22.5,
+          "click": 23.5
         },
         {
           "label": "メンバーシップ",
@@ -219,11 +205,11 @@
           "note": "限定動画・1対1で質問できるプランあり",
           "link": "動画の下の「メンバーになる」から",
           "badge": "おすすめ",
-          "appear": 12.5,
-          "click": 13.5
+          "appear": 24.5,
+          "click": 25.5
         }
       ],
-      "thanksAt": 32,
+      "thanksAt": 34,
       "endAt": 38,
       "endScreen": {
         "_note": "Where YouTube draws the end-screen elements (1920x1080). Kept as framed slots.",
@@ -249,15 +235,82 @@
         ]
       },
       "breakdown": [
-        24,
-        32
+        16,
+        20
       ],
       "glowOrder": [
         2,
         0,
         2,
         1
-      ]
+      ],
+      "promo": {
+        "mvp": {
+          "title": "Microsoft MVP",
+          "years": 14,
+          "suffix": "年連続受賞",
+          "category": "Azure Hybrid & Windows Server",
+          "countFrom": 0.5,
+          "countTo": 2.5
+        },
+        "range": {
+          "at": 5,
+          "kicker": "胡田昌彦チャンネルの守備範囲",
+          "words": [
+            "オンプレ",
+            "クラウド",
+            "生成AI"
+          ],
+          "wordsAt": [
+            0.5,
+            1.5,
+            2.5
+          ],
+          "tagline": "ぜんぶ、ここで解説します",
+          "taglineAt": 3.3
+        },
+        "stats": {
+          "at": 10,
+          "heading": "現場で積み上げてきたもの",
+          "tilesAt": [
+            0.5,
+            1.5,
+            2.5,
+            3.5
+          ],
+          "tiles": [
+            {
+              "label": "解説動画",
+              "value": 900,
+              "unit": "本以上"
+            },
+            {
+              "label": "インフラの現場で",
+              "value": 20,
+              "unit": "年以上"
+            },
+            {
+              "label": "PCに触れてきて",
+              "value": 40,
+              "unit": "年以上"
+            },
+            {
+              "label": "著書",
+              "text": "Windowsインフラ管理者入門",
+              "sub": "カットシステム刊"
+            }
+          ]
+        },
+        "identity": {
+          "at": 15,
+          "name": "胡田昌彦",
+          "lines": [
+            "Windows・Azure・M365・生成AIを",
+            "現場目線でわかりやすく"
+          ],
+          "badge": "Microsoft MVP 14年連続"
+        }
+      }
     }
   }
 }
