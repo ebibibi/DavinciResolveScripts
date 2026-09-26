@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from auto_editor_config import load_auto_editor_config  # noqa: E402
 from ending_media import find_outro_video, first_existing_path  # noqa: E402
+from media_pool_clips import ensure_generated_clips  # noqa: E402
 
 print("DaVinci Resolve自動動画編集スクリプト（無料版）開始")
 
@@ -114,6 +115,9 @@ if not main_timeline:
 
 print("MediaPoolオブジェクトを取得します")
 media_pool = project.GetMediaPool()
+
+# アイキャッチとエンドカードをビンに用意する（失敗しても続行）
+ensure_generated_clips(media_pool)
 
 # フォルダ内の最新のXMLファイルを検索
 print("XMLファイルを検索します")

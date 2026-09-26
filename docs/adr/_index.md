@@ -18,3 +18,4 @@
 
 - [ADR-016: Editable title presets](016-bundle-editable-title-presets.md) — Twelve bundled Fusion titles with non-destructive installation (accepted, 2026-09-06).
 - [ADR-017: Drop the template opening and append the end card](017-drop-the-template-opening-and-append-the-end-card.md) — The body starts the timeline; every Resolve route appends the end card after the ending clip (accepted, 2026-09-26).
+- [ADR-018: Import the generated clips into a Media Pool bin](018-keep-generated-clips-in-a-media-pool-bin.md) — Every Resolve route fills an "EBI アイキャッチ" bin with the stingers and the end card at run time; the template BGM is removed (accepted, 2026-09-26).

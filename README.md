@@ -28,9 +28,10 @@ Inspector. See the [catalog, installation guide and validation status](title_pre
 ## Template timeline and ending
 
 The `main` timeline of both `テンプレート.drp` files no longer starts with the
-opening clip `01_EBI_CHAN_OP.mov`: a different opening is used now. It keeps the
-`MasahikoEbisuda_MicrosoftMVP.mov` overlay (and the BGM item) layered at the
-start, and the edited body starts at the beginning of the timeline. An opening
+opening clip `01_EBI_CHAN_OP.mov`: a different opening is used now, and the BGM
+`Big 10 - TrackTribe.mp3` has been removed as well. Only the
+`MasahikoEbisuda_MicrosoftMVP.mov` overlay is left, layered at the start, and the
+edited body starts at the beginning of the timeline. An opening
 clip placed on V1 by hand is still honoured: the body then starts after it.
 
 Every Resolve route (stable, dual source and free) ends the video with:
@@ -42,6 +43,16 @@ body -> 03_EBI_CHAN_IN.mov -> EBI_CHAN_OUTRO.mp4 (20-second end card)
 The end card is taken from the OneDrive `!動画素材` folder when it is there, and
 otherwise from the copy bundled at `assets/EBI_CHAN_OUTRO.mp4`. See
 [ADR-017](docs/adr/017-drop-the-template-opening-and-append-the-end-card.md).
+
+## Generated clips in the Media Pool
+
+Right after it opens the project, every Resolve route (stable, dual source and
+free) makes sure the Media Pool has a bin **`EBI アイキャッチ`** under the root
+holding the ten eyecatch stingers (`EBI_CHAN_EYECATCH_*.mp4`) and the end card.
+Only clips not already in the bin are imported, each from the OneDrive
+`!動画素材` folder when it is there and otherwise from the bundled copy in
+`assets/`. A failure is reported and the edit continues. See
+[ADR-018](docs/adr/018-keep-generated-clips-in-a-media-pool-bin.md).
 
 ## Eyecatch stingers
 
