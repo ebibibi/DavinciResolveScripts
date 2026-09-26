@@ -1,8 +1,14 @@
-// End card, reusable on every video: first the channel's range (on-prem → cloud →
-// generative AI, over scrolling topic chips), then like / subscribe / join, each
-// one "clicked" on the beat. Nothing here is dated, so it never goes stale.
+// End card, built around the channel's YouTube end screen: for 20 seconds YouTube
+// draws two video elements down the left and a subscribe element at the bottom
+// right. Those regions (cue.endScreen) stay framed slots; everything else lives
+// in the free space — the range first, then the four asks, then thanks.
+// Nothing here is dated, so the same file can close every video.
 const JP = '"Noto Sans CJK JP", sans-serif';
 const EMOJI = '"Noto Color Emoji", sans-serif';
+const CENTER = { x: 700, y: 125, w: 815, h: 800 };
+const SIDE = { x: 1545, w: 335 };
+const CARD_H = 240;
+const CARD_GAP = 40;
 
 variants.outro = {
   setup() {
@@ -10,228 +16,301 @@ variants.outro = {
   },
 
   draw(ctx, beat, cue) {
-    if (beat < cue.hit + 0.4) this.drawRange(ctx, beat, cue);
-    // The CTA half wipes in diagonally on the hit, over the range half.
-    const wipe = span(beat, cue.hit, 0.4, ease.expoOut);
-    if (wipe > 0) {
+    ctx.fillStyle = BRAND.yellow;
+    ctx.fillRect(0, 0, W, H);
+    stripes(ctx, beat);
+    this.drawMarquee(ctx, beat, cue);
+    this.drawSlots(ctx, beat, cue);
+    this.drawSide(ctx, beat, cue);
+    cue.cta.forEach((card, i) => this.drawCard(ctx, beat, cue, card, i));
+    if (beat < cue.hit + 0.5) this.drawRange(ctx, beat, cue);
+    this.drawCursor(ctx, beat, cue);
+  },
+
+  cardY(i) {
+    return CENTER.y + i * (CARD_H + CARD_GAP);
+  },
+
+  // ---------- always on ----------
+
+  drawMarquee(ctx, beat, cue) {
+    // Topic chips run along the top and bottom edges for the whole card,
+    // so something is always moving even while the viewer reads.
+    const rows = [cue.topics[0].concat(cue.topics[1]), cue.topics[2].concat(cue.topics[1])];
+    const ys = [58, 1022];
+    ctx.save();
+    ctx.font = `700 30px ${JP}`;
+    ctx.textBaseline = 'middle';
+    if (!this.chipWidths) this.chipWidths = rows.map((row) => row.map((t) => ctx.measureText(t).width + 48));
+    const travel = beat * 110 + Math.pow(span(beat, 5, 3), 3) * 700;
+    const lit = Math.floor(beat * 2);
+    rows.forEach((row, r) => {
+      const widths = this.chipWidths[r];
+      const loop = widths.reduce((a, b) => a + b + 18, 0);
+      const dir = r ? 1 : -1;
+      const enter = span(beat, r * 0.2, 0.7, ease.expoOut);
+      let x = (((dir * travel) % loop) + loop) % loop - loop + dir * (1 - enter) * 1400;
+      for (let k = 0; x < W + loop; k++) {
+        const i = k % row.length;
+        const w = widths[i];
+        if (x + w > 0 && x < W) {
+          const hot = (lit * 3 + r * 5) % row.length === i;
+          ctx.fillStyle = hot ? BRAND.red : BRAND.ink;
+          ctx.beginPath();
+          ctx.roundRect(x, ys[r] - 27, w, 54, 27);
+          ctx.fill();
+          ctx.fillStyle = hot ? '#FFFFFF' : BRAND.cream;
+          ctx.textAlign = 'center';
+          ctx.fillText(row[i], x + w / 2, ys[r] + 1);
+        }
+        x += w + 18;
+      }
+    });
+    ctx.restore();
+  },
+
+  drawSlots(ctx, beat, cue) {
+    // YouTube covers these with its own elements; the frame makes them look planned.
+    const { videos, subscribe } = cue.endScreen;
+    const slots = videos.concat([subscribe]);
+    slots.forEach(([x, y, w, h], i) => {
+      const p = span(beat, 0.2 + i * 0.25, 0.5, ease.expoOut);
       ctx.save();
+      ctx.globalAlpha = p;
+      ctx.fillStyle = 'rgba(28,20,17,0.16)';
       ctx.beginPath();
-      const edge = lerp(-600, W + 600, wipe);
-      ctx.moveTo(-600, 0);
-      ctx.lineTo(edge + 300, 0);
-      ctx.lineTo(edge - 300, H);
-      ctx.lineTo(-600, H);
-      ctx.closePath();
-      ctx.clip();
-      this.drawCta(ctx, beat, cue);
+      ctx.roundRect(x, y, w, h, 22);
+      ctx.fill();
+      ctx.setLineDash([18, 12]);
+      ctx.lineDashOffset = -beat * 30;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = BRAND.ink;
+      ctx.stroke();
+      ctx.restore();
+    });
+    ctx.save();
+    ctx.font = `900 28px ${JP}`;
+    ctx.fillStyle = BRAND.ink;
+    ctx.globalAlpha = span(beat, 0.4, 0.5);
+    ctx.fillText('▶ 次に見るならこちら', videos[0][0] + 6, videos[0][1] - 14);
+    ctx.textAlign = 'center';
+    const nudge = 6 * Math.abs(Math.sin(beat * Math.PI));
+    ctx.fillText('チャンネル登録はここ ↓', subscribe[0] + subscribe[2] / 2, subscribe[1] - 16 - nudge);
+    ctx.restore();
+  },
+
+  drawSide(ctx, beat, cue) {
+    const cx = SIDE.x + SIDE.w / 2;
+    const inn = span(beat, 0.3, 0.6, ease.backOut);
+    const pulse = beat >= cue.endAt ? 1 + 0.1 * Math.exp(-(beat - cue.endAt) * 6) : 1;
+    const bob = Math.sin(beat * Math.PI) * 6;
+    const h = 400 * inn * pulse;
+    const w = h * (logo.width / logo.height);
+    if (h > 0) ctx.drawImage(logo, cx - w / 2, 320 - h / 2 + bob, w, h);
+    if (beat >= cue.endAt) {
+      const p = span(beat, cue.endAt, 0.8, ease.expoOut);
+      ctx.save();
+      ctx.strokeStyle = BRAND.red;
+      ctx.globalAlpha = 1 - p;
+      ctx.lineWidth = lerp(24, 2, p);
+      ctx.beginPath();
+      ctx.arc(cx, 320, lerp(150, 380, p), 0, Math.PI * 2);
+      ctx.stroke();
       ctx.restore();
     }
+    // Under the logo: who this is, then (near the end) thanks.
+    const thanks = span(beat, cue.thanksAt, 0.6, ease.expoOut);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = BRAND.ink;
+    ctx.globalAlpha = span(beat, 0.8, 0.5) * (1 - thanks);
+    ctx.font = `900 40px ${JP}`;
+    ctx.fillText('胡田昌彦', cx, 580);
+    ctx.font = `700 21px ${JP}`;
+    ctx.fillText('Windows / Azure / M365 / 生成AI', cx, 618);
+    ctx.globalAlpha = thanks;
+    ctx.font = `900 27px ${JP}`;
+    ctx.fillText('ご視聴', cx, 575 + (1 - thanks) * 20);
+    ctx.fillText('ありがとうございました！', cx, 622 + (1 - thanks) * 20);
+    ctx.restore();
   },
 
   // ---------- part 1: the range ----------
 
   drawRange(ctx, beat, cue) {
-    ctx.fillStyle = BRAND.ink;
-    ctx.fillRect(0, 0, W, H);
-    this.drawMarquee(ctx, beat, cue);
-
-    const kicker = span(beat, 0, 0.4, ease.expoOut);
+    const out = span(beat, cue.hit, 0.45, ease.expoIn);
+    const { x, y, w, h } = CENTER;
     ctx.save();
-    ctx.globalAlpha = kicker;
-    ctx.font = `700 40px ${JP}`;
+    ctx.translate(0, -out * 1100);
+    ctx.fillStyle = BRAND.ink;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 28);
+    ctx.fill();
+    const cx = x + w / 2;
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const kicker = span(beat, 0, 0.4, ease.expoOut);
+    ctx.globalAlpha = kicker;
+    ctx.font = `700 34px ${JP}`;
     ctx.fillStyle = BRAND.cream;
-    ctx.fillText('胡田昌彦チャンネルの守備範囲', W / 2, 400 - (1 - kicker) * 30);
-    ctx.restore();
+    ctx.fillText('胡田昌彦チャンネルの守備範囲', cx, 205);
+    ctx.globalAlpha = 1;
 
     const { words, at, tagline, taglineAt } = cue.range;
-    ctx.save();
-    ctx.font = `900 112px ${JP}`;
-    ctx.textBaseline = 'middle';
-    const arrow = 110;
-    const widths = words.map((w) => ctx.measureText(w).width);
-    let x = W / 2 - (widths.reduce((a, b) => a + b, 0) + arrow * (words.length - 1)) / 2;
-    // Every word nods on each beat once it is in, so the line keeps moving with the music.
-    const nod = 1 + 0.05 * Math.exp(-(beat % 1) * 8) * (beat >= at[at.length - 1] ? 1 : 0);
+    const nod = beat >= at[at.length - 1] ? 1 + 0.05 * Math.exp(-(beat % 1) * 8) : 1;
     words.forEach((word, i) => {
       const p = span(beat, at[i], 0.45, ease.backOut);
+      const wy = 330 + i * 180;
       if (p > 0) {
         ctx.save();
-        ctx.translate(x + widths[i] / 2, 540);
+        ctx.translate(cx, wy);
         ctx.scale(p * nod, p * nod);
+        ctx.font = `900 112px ${JP}`;
         ctx.fillStyle = i === words.length - 1 ? BRAND.yellow : BRAND.cream;
-        ctx.textAlign = 'center';
         ctx.fillText(word, 0, 0);
         ctx.restore();
       }
-      x += widths[i];
       if (i < words.length - 1) {
         const a = span(beat, at[i] + 0.5, 0.3, ease.expoOut);
-        ctx.fillStyle = BRAND.red;
         ctx.globalAlpha = a;
-        ctx.textAlign = 'center';
-        ctx.fillText('→', x + arrow / 2 - (1 - a) * 40, 540);
+        ctx.font = `900 60px ${JP}`;
+        ctx.fillStyle = BRAND.red;
+        ctx.fillText('↓', cx, wy + 90 - (1 - a) * 30);
         ctx.globalAlpha = 1;
-        x += arrow;
       }
     });
     const tag = span(beat, taglineAt, 0.5, ease.expoOut);
     ctx.globalAlpha = tag;
-    ctx.font = `700 60px ${JP}`;
-    ctx.textAlign = 'center';
+    ctx.font = `900 46px ${JP}`;
     ctx.fillStyle = BRAND.yellow;
-    ctx.fillText(tagline, W / 2, 680 + (1 - tag) * 40);
+    ctx.fillText(tagline, cx, 860 + (1 - tag) * 30);
     ctx.restore();
   },
 
-  drawMarquee(ctx, beat, cue) {
-    const rows = cue.topics;
-    const ys = [150, 260, 930];
-    ctx.save();
-    ctx.font = `700 38px ${JP}`;
-    ctx.textBaseline = 'middle';
-    if (!this.chipWidths) {
-      this.chipWidths = rows.map((row) => row.map((t) => ctx.measureText(t).width + 64));
-    }
-    // Speed grows toward the wipe, so the first half builds into the second.
-    const travel = beat * 150 + Math.pow(span(beat, 5, 3), 3) * 900;
-    const lit = Math.floor(beat * 2); // one chip lights up every half beat
-    rows.forEach((row, r) => {
-      const widths = this.chipWidths[r];
-      const loop = widths.reduce((a, b) => a + b + 24, 0);
-      const enter = span(beat, r * 0.15, 0.6, ease.expoOut);
-      const dir = r % 2 ? 1 : -1;
-      let offset = ((dir * travel) % loop + loop) % loop - loop;
-      offset += dir * (1 - enter) * 1400;
-      for (let x = offset, k = 0; x < W + loop; k++) {
-        const i = k % row.length;
-        const w = widths[i];
-        if (x + w > 0 && x < W) {
-          const hot = beat >= 4 && (lit + r * 3) % 7 === i;
-          const pulse = hot ? 1 + 0.12 * Math.exp(-(beat * 2 % 1) * 6) : 1;
-          ctx.save();
-          ctx.translate(x + w / 2, ys[r]);
-          ctx.scale(pulse, pulse);
-          ctx.globalAlpha = r === 1 ? 1 : 0.8;
-          ctx.fillStyle = hot ? BRAND.red : r === 1 ? BRAND.yellow : 'rgba(232,206,176,0.12)';
-          ctx.strokeStyle = r === 1 ? BRAND.yellow : BRAND.cream;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.roundRect(-w / 2, -34, w, 68, 34);
-          ctx.fill();
-          if (r !== 1) ctx.stroke();
-          ctx.fillStyle = r === 1 && !hot ? BRAND.ink : BRAND.cream;
-          ctx.textAlign = 'center';
-          ctx.fillText(row[i], 0, 2);
-          ctx.restore();
-        }
-        x += w + 24;
-      }
-    });
-    ctx.restore();
-  },
+  // ---------- part 2: the four asks ----------
 
-  // ---------- part 2: like / subscribe / join ----------
-
-  drawCta(ctx, beat, cue) {
-    ctx.fillStyle = BRAND.yellow;
-    ctx.fillRect(0, 0, W, H);
-    stripes(ctx, beat);
-
-    const head = span(beat, cue.hit + 0.2, 0.5, ease.expoOut);
-    ctx.save();
-    ctx.globalAlpha = head;
-    ctx.font = `900 64px ${JP}`;
-    ctx.fillStyle = BRAND.ink;
-    ctx.fillText('応援よろしくお願いします！', 130, 190 - (1 - head) * 30);
-    ctx.restore();
-
-    const cards = cue.cta;
-    const cardY = (i) => 290 + i * 210;
-    cards.forEach((card, i) => this.drawCard(ctx, beat, card, i, cardY(i)));
-    this.drawCursor(ctx, beat, cards, cardY);
-    this.drawSign(ctx, beat, cue);
-  },
-
-  drawCard(ctx, beat, card, i, y) {
+  drawCard(ctx, beat, cue, card, i) {
     const inn = span(beat, card.appear, 0.5, ease.expoOut);
     if (inn <= 0) return;
     const clicked = beat >= card.click;
+    // After every card is in, the cards take turns glowing, two beats each.
+    const last = cue.cta[cue.cta.length - 1].click + 1.5;
+    // glowOrder lists whose turn it is; the card we most want clicked appears in it most often.
+    const order = cue.glowOrder;
+    const turn = beat >= last && beat < cue.endAt ? order[Math.floor((beat - last) / 2) % order.length] : -1;
+    const glowing = turn === i;
+    const glowAt = last + Math.floor((beat - last) / 2) * 2;
     const press = clicked ? 1 - 0.05 * Math.exp(-(beat - card.click) * 14) : 1;
-    const x = 130 - (1 - inn) * 900;
-    const w = 860;
-    const h = 170;
+    const lift = glowing ? 1 + 0.025 * Math.exp(-(beat - glowAt) * 3) : 1;
+    const x = CENTER.x + (1 - inn) * 1300;
+    const y = this.cardY(i);
+    const w = CENTER.w;
     const themes = [
       { bg: '#FFFFFF', fg: BRAND.ink },
-      { bg: clicked ? '#E4E0DA' : BRAND.red, fg: clicked ? BRAND.ink : '#FFFFFF' },
+      { bg: clicked ? '#EFEBE6' : BRAND.red, fg: clicked ? BRAND.ink : '#FFFFFF' },
       { bg: BRAND.ink, fg: BRAND.yellow },
     ];
     const theme = themes[i];
     ctx.save();
-    ctx.translate(x + w / 2, y + h / 2);
-    ctx.scale(press, press);
-    ctx.shadowColor = 'rgba(28,20,17,0.3)';
-    ctx.shadowBlur = 30;
-    ctx.shadowOffsetY = 10;
+    ctx.translate(x + w / 2, y + CARD_H / 2);
+    ctx.scale(press * lift, press * lift);
+    ctx.shadowColor = 'rgba(28,20,17,0.28)';
+    ctx.shadowBlur = glowing ? 40 : 24;
+    ctx.shadowOffsetY = 8;
     ctx.fillStyle = theme.bg;
     ctx.beginPath();
-    ctx.roundRect(-w / 2, -h / 2, w, h, 36);
+    ctx.roundRect(-w / 2, -CARD_H / 2, w, CARD_H, 30);
     ctx.fill();
     ctx.shadowColor = 'transparent';
+    if (glowing) {
+      ctx.strokeStyle = BRAND.red;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+    }
+    if (card.badge) this.drawBadge(ctx, beat, card, -w / 2 + 170, -CARD_H / 2);
 
-    // Icon: the thumb jumps, the bell swings, the star spins — each on its click.
-    const since = beat - card.click;
+    // Icons move on their click and again on their turn to glow.
+    const since = Math.min(clicked ? beat - card.click : 99, glowing ? beat - glowAt : 99);
     ctx.save();
-    ctx.translate(-w / 2 + 100, 4);
-    if (clicked && i === 0) ctx.translate(0, -40 * Math.exp(-since * 6) * Math.abs(Math.sin(since * 12)));
-    if (clicked && i === 1) ctx.rotate(0.5 * Math.exp(-since * 3) * Math.sin(since * 18));
-    if (clicked && i === 2) ctx.rotate(Math.PI * 2 * ease.expoOut(clamp01(since / 0.6)));
-    ctx.font = `90px ${EMOJI}`;
+    ctx.translate(-w / 2 + 95, 0);
+    if (since < 3) {
+      if (i === 0) ctx.translate(0, -34 * Math.exp(-since * 6) * Math.abs(Math.sin(since * 12)));
+      if (i === 1) ctx.rotate(0.5 * Math.exp(-since * 3) * Math.sin(since * 18));
+      if (i === 2) ctx.rotate(Math.PI * 2 * ease.expoOut(clamp01(since / 0.6)));
+    }
+    ctx.font = `96px ${EMOJI}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(card.icon, 0, 0);
+    ctx.fillText(card.icon, 0, 4);
     ctx.restore();
 
-    const label = clicked && i === 1 ? '登録済み' : card.label;
+    const label = clicked && i === 1 ? '登録済み・通知オン' : card.label;
     ctx.fillStyle = theme.fg;
     ctx.textBaseline = 'middle';
-    ctx.font = `900 60px ${JP}`;
-    ctx.fillText(label, -w / 2 + 190, -18);
-    ctx.globalAlpha = 0.75;
-    ctx.font = `500 32px ${JP}`;
-    ctx.fillText(card.note, -w / 2 + 192, 46);
+    ctx.font = `900 52px ${JP}`;
+    ctx.fillText(label, -w / 2 + 180, card.link ? -40 : -30);
+    ctx.globalAlpha = 0.8;
+    ctx.font = `500 29px ${JP}`;
+    ctx.fillText(card.note, -w / 2 + 182, card.link ? 18 : 38);
     ctx.globalAlpha = 1;
-    if (clicked) {
-      const tick = span(beat, card.click, 0.3, ease.backOut);
-      ctx.save();
-      ctx.translate(w / 2 - 80, 0);
-      ctx.scale(tick, tick);
-      ctx.fillStyle = BRAND.red;
-      ctx.beginPath();
-      ctx.arc(0, 0, 40, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 10;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(-17, 2);
-      ctx.lineTo(-4, 15);
-      ctx.lineTo(19, -12);
-      ctx.stroke();
-      ctx.restore();
+    if (card.link) {
+      ctx.font = `700 28px ${JP}`;
+      ctx.fillStyle = BRAND.yellow;
+      ctx.fillText(`${card.link} →`, -w / 2 + 182, 70);
     }
+    if (clicked) this.drawCheck(ctx, beat, card.click, w / 2 - 60);
     ctx.restore();
 
     if (clicked && i === 0) {
       const up = span(beat, card.click, 1, ease.expoOut);
       ctx.save();
       ctx.globalAlpha = 1 - up;
-      ctx.font = `900 56px ${JP}`;
+      ctx.font = `900 50px ${JP}`;
       ctx.fillStyle = BRAND.red;
-      ctx.fillText('+1', x + 150, y - up * 90);
+      ctx.fillText('+1', x + 140, y + 20 - up * 80);
       ctx.restore();
     }
-    if (clicked && i === 2) this.sparkle(ctx, beat, card.click, x + 100, y + h / 2);
+    if (clicked && i === 2) this.sparkle(ctx, beat, card.click, x + 95, y + CARD_H / 2);
+  },
+
+  drawBadge(ctx, beat, card, x, top) {
+    // A tab on the card's top edge, popping in with the card and nodding on the beat.
+    const p = span(beat, card.appear + 0.3, 0.4, ease.backOut);
+    if (p <= 0) return;
+    const nod = 1 + 0.06 * Math.exp(-(beat % 1) * 8);
+    ctx.save();
+    ctx.translate(x + 80, top);
+    ctx.scale(p * nod, p * nod);
+    ctx.fillStyle = BRAND.red;
+    ctx.beginPath();
+    ctx.roundRect(-80, -26, 160, 52, 26);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `900 30px ${JP}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(card.badge, 0, 2);
+    ctx.restore();
+  },
+
+  drawCheck(ctx, beat, at, x) {
+    const tick = span(beat, at, 0.3, ease.backOut);
+    ctx.save();
+    ctx.translate(x, 0);
+    ctx.scale(tick, tick);
+    ctx.fillStyle = BRAND.red;
+    ctx.beginPath();
+    ctx.arc(0, 0, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-15, 2);
+    ctx.lineTo(-4, 13);
+    ctx.lineTo(16, -10);
+    ctx.stroke();
+    ctx.restore();
   },
 
   sparkle(ctx, beat, at, cx, cy) {
@@ -242,7 +321,7 @@ variants.outro = {
     ctx.globalAlpha = 1 - p;
     for (let i = 0; i < 28; i++) {
       const a = rand() * Math.PI * 2;
-      const d = (80 + rand() * 260) * p;
+      const d = (70 + rand() * 240) * p;
       ctx.fillStyle = i % 2 ? BRAND.yellow : '#FFFFFF';
       ctx.beginPath();
       ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 4 + rand() * 7, 0, Math.PI * 2);
@@ -251,13 +330,13 @@ variants.outro = {
     ctx.restore();
   },
 
-  drawCursor(ctx, beat, cards, cardY) {
-    // The pointer glides to each card (expo) and clicks on the card's beat.
-    const home = { x: 1250, y: 1150 };
-    const targets = cards.map((c, i) => ({ x: 720, y: cardY(i) + 110, at: c.click }));
-    let pos = home;
+  drawCursor(ctx, beat, cue) {
+    // The pointer glides to each card (expo), clicks on the card's beat, then leaves.
+    const home = { x: 1300, y: 1180 };
+    const targets = cue.cta.map((c, i) => ({ x: 1230, y: this.cardY(i) + 150, at: c.click }));
     let prev = home;
-    let from = cards[0].appear;
+    let pos = home;
+    let from = cue.cta[0].appear;
     for (const t of targets) {
       const p = span(beat, Math.max(from, t.at - 0.7), 0.6, ease.expoOut);
       pos = { x: lerp(prev.x, t.x, p), y: lerp(prev.y, t.y, p) };
@@ -265,9 +344,9 @@ variants.outro = {
       prev = t;
       from = t.at + 0.2;
     }
-    const last = cards[cards.length - 1].click;
-    const leave = span(beat, last + 0.6, 0.6, ease.expoIn);
+    const leave = span(beat, targets[targets.length - 1].at + 0.6, 0.6, ease.expoIn);
     pos = { x: lerp(pos.x, home.x, leave), y: lerp(pos.y, home.y, leave) };
+    if (leave >= 1) return;
 
     for (const t of targets) {
       const ring = span(beat, t.at, 0.4, ease.expoOut);
@@ -300,36 +379,6 @@ variants.outro = {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.restore();
-  },
-
-  drawSign(ctx, beat, cue) {
-    // The logo on the right, bobbing with the beat; thanks under it; one last pulse.
-    const inn = span(beat, cue.hit + 0.3, 0.5, ease.backOut);
-    if (inn <= 0) return;
-    const bob = Math.sin(beat * Math.PI) * 8 * (beat < cue.endAt ? 1 : 0);
-    const end = beat >= cue.endAt ? 1 + 0.08 * Math.exp(-(beat - cue.endAt) * 6) : 1;
-    const h = 520 * inn * end;
-    const w = h * (logo.width / logo.height);
-    ctx.drawImage(logo, 1440 - w / 2, 470 - h / 2 + bob, w, h);
-    if (beat >= cue.endAt) {
-      const p = span(beat, cue.endAt, 0.8, ease.expoOut);
-      ctx.save();
-      ctx.strokeStyle = BRAND.red;
-      ctx.globalAlpha = 1 - p;
-      ctx.lineWidth = lerp(30, 2, p);
-      ctx.beginPath();
-      ctx.arc(1440, 470, lerp(200, 520, p), 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-    const thanks = span(beat, cue.thanksAt, 0.6, ease.expoOut);
-    ctx.save();
-    ctx.globalAlpha = thanks;
-    ctx.font = `900 52px ${JP}`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = BRAND.ink;
-    ctx.fillText('ご視聴ありがとうございました！', 1440, 850 + (1 - thanks) * 30);
     ctx.restore();
   },
 };
