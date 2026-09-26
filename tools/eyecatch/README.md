@@ -17,12 +17,34 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 | `pixelate` | the logo arrives as coarse pixels and sharpens one step per beat | data chatter that gets faster and higher each step, bit-crushed, then a two-tone "done" chime |
 | `countdown` | an old film leader counts 4-3-2-1 with a sweeping hand, scratches and flicker | projector rattle at 24 clicks a second, a beep per number, then an orchestral hit |
 
+## End card (`outro`)
+
+A 10-second (20-beat) card for the end of every video, written to never go
+stale (no dates, counts or titles):
+
+1. **Beats 0–8 — the range.** Topic chips scroll in three rows (infrastructure,
+   cloud / Microsoft 365, AI) while オンプレ → クラウド → 生成AI slams in one
+   word per beat, then "ぜんぶ、ここで解説します". The chips speed up into the wipe.
+2. **Beats 8–18 — the ask.** A diagonal wipe to yellow; 高評価, チャンネル登録 and
+   メンバーになる cards slide in, and a pointer clicks each one on the beat
+   (thumb jumps and +1, bell rings and turns into 登録済み, star spins and sparkles).
+3. **Beats 18–20 — the end.** The logo pulses once over a final chord.
+
+The music is a small club track in A (A – F#m – D – E – A) with a mouse click and
+a reward sound for each card. Copy, topics and timing all live under
+`variants.outro` in `timeline.json`, so changing a word does not need code.
+It renders to `EBI_CHAN_OUTRO.mp4` (about 5 minutes: 600 frames x 10 blur samples).
+
+A variant can set its own `beats`, `hitBeat` and `output` name in `timeline.json`;
+anything it leaves out comes from the top level.
+
 ## Run
 
 ```bash
 pip install -r requirements-dev.txt
 playwright install chromium
-python tools/eyecatch/render.py                # all variants -> tools/eyecatch/out/
+python tools/eyecatch/render.py                # all variants + end card -> tools/eyecatch/out/
+python tools/eyecatch/render.py outro          # just the end card
 python tools/eyecatch/render.py morph --out D:/素材
 ```
 
@@ -52,7 +74,7 @@ python tools/eyecatch/render.py morph --out D:/素材
 
 - `timeline.json` — BPM, length, the hit beat, and each variant's own timing
 - `engine.js` — maths, easing, shared drawing, motion blur and finishing, the frame loop
-- `variants/<name>.js` — one picture per file
+- `variants/<name>.js` — one picture per file (`outro.js` is the end card)
 - `synth.py` — oscillators, noise, filters and the stereo `Mix`
 - `sounds/<name>.py` — one sound design per file, registered in `sounds/__init__.py`
 - `make_audio.py` / `render.py` — soundtrack assembly and the renderer

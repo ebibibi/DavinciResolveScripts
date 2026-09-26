@@ -47,8 +47,8 @@ def cue_from_timeline(timeline: dict, variant: str) -> Cue:
     spec = timeline["variants"][variant]
     return Cue(
         bpm=timeline["bpm"],
-        beats=timeline["beats"],
-        hit_beat=timeline["hitBeat"],
+        beats=spec.get("beats", timeline["beats"]),
+        hit_beat=spec.get("hitBeat", timeline["hitBeat"]),
         silence_before_hit=timeline["silenceBeforeHit"],
         sound=spec["sound"],
         ticks=tuple(spec.get("ticks", ())),

@@ -22,7 +22,11 @@ def _window_rms(signal: np.ndarray, start_s: float, length_s: float) -> float:
     return float(np.sqrt(np.mean(signal[start : start + int(length_s * RATE)] ** 2)))
 
 
-@pytest.mark.parametrize("variant", sorted(TIMELINE["variants"]))
+STINGERS = sorted(n for n, v in TIMELINE["variants"].items() if v.get("kind") != "outro")
+OUTROS = sorted(n for n, v in TIMELINE["variants"].items() if v.get("kind") == "outro")
+
+
+@pytest.mark.parametrize("variant", STINGERS)
 def test_soundtrack_matches_the_timeline(variant: str) -> None:
     cue = cue_from_timeline(TIMELINE, variant)
     mix = render(cue)
@@ -39,3 +43,17 @@ def test_soundtrack_matches_the_timeline(variant: str) -> None:
 def test_video_frame_count_is_a_whole_number_of_frames() -> None:
     seconds = TIMELINE["beats"] * 60 / TIMELINE["bpm"]
     assert (seconds * TIMELINE["fps"]).is_integer()
+
+
+@pytest.mark.parametrize("variant", OUTROS)
+def test_end_card_soundtrack_fits_its_own_length(variant: str) -> None:
+    cue = cue_from_timeline(TIMELINE, variant)
+    mix = render(cue)
+    assert len(mix) == int(RATE * cue.seconds(cue.beats))
+    assert np.max(np.abs(mix)) <= 0.9
+    # The drop into the call to action still gets its moment of silence.
+    assert _window_rms(mix, cue.hit_s - cue.silence_before_hit + 0.005, 0.09) == 0.0
+    # And the music never falls silent anywhere else for a whole beat.
+    beat = cue.seconds(1)
+    for start in np.arange(0, cue.total_s - beat, beat):
+        assert _window_rms(mix, start, beat) > 0.01

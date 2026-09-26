@@ -280,11 +280,14 @@ window.setup = async function (config, variantName, logoUrl) {
   variantSpec = config.variants[variantName];
   if (!variant) throw new Error(`Unknown variant: ${variantName}`);
   variant.setup();
-  return Math.round((config.beats * 60 / config.bpm) * config.fps);
+  // A variant may run longer than a stinger (the end card does) and hit elsewhere.
+  const beats = variantSpec.beats ?? config.beats;
+  return Math.round((beats * 60 / config.bpm) * config.fps);
 };
 
 window.renderFrame = function (frame) {
-  const { bpm, fps, hitBeat } = timeline;
+  const { bpm, fps } = timeline;
+  const hitBeat = variantSpec.hitBeat ?? timeline.hitBeat;
   const cue = { ...variantSpec, hit: hitBeat };
   const sceneCtx = scene.getContext('2d');
   const accumCtx = accum.getContext('2d');

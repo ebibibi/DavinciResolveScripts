@@ -113,7 +113,8 @@ def main() -> int:
                 audio = work / f"{name}.wav"
                 _encode_video(page, name, timeline, base, video)
                 write_wav(audio, render_audio(cue_from_timeline(timeline, name)))
-                target = args.out / f"EBI_CHAN_EYECATCH_{name}.mp4"
+                output = timeline["variants"][name].get("output", f"EBI_CHAN_EYECATCH_{name}")
+                target = args.out / f"{output}.mp4"
                 _mux(video, audio, target)
                 print(f"  -> {target}")
             browser.close()
