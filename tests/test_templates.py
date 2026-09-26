@@ -1,10 +1,11 @@
 """What the bundled Resolve templates put on the `main` timeline.
 
-The opening clip was removed because a different opening is used now; the
-overlay that is only layered on top stays. See ADR-017.
+The opening clip was removed because a different opening is used now, and the
+BGM went with it; the overlay that is only layered on top stays. See ADR-017.
 """
 
 import re
+import struct
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
@@ -43,13 +44,31 @@ def media_pool_ids(template: Path) -> set[str]:
     return set(re.findall(r'DbId="([^"]+)"', folder))
 
 
+def folder_xml(template: Path) -> str:
+    with zipfile.ZipFile(template) as archive:
+        return archive.read(remove_timeline_clip.FOLDER).decode("utf-8")
+
+
 @pytest.mark.parametrize("edition", sorted(TEMPLATES))
-def test_the_opening_clip_is_gone_and_the_overlay_stays(edition):
+def test_only_the_overlay_is_left_on_the_timeline(edition):
     names = [item.findtext("Name") for item in timeline_items(TEMPLATES[edition])]
 
-    assert not any("01_EBI_CHAN_OP" in name for name in names)
-    assert names.count("MasahikoEbisuda_MicrosoftMVP.mov") == 1
-    assert names.count("Big 10 - TrackTribe.mp3") == 1
+    assert names == ["MasahikoEbisuda_MicrosoftMVP.mov"]
+
+
+@pytest.mark.parametrize("edition", sorted(TEMPLATES))
+def test_the_bgm_is_gone_from_the_whole_project(edition):
+    with zipfile.ZipFile(TEMPLATES[edition]) as archive:
+        for member in archive.namelist():
+            assert "TrackTribe" not in archive.read(member).decode("utf-8"), member
+
+
+@pytest.mark.parametrize("edition", sorted(TEMPLATES))
+def test_the_recorded_timeline_length_matches_what_is_left(edition):
+    extents = re.search(r"<MediaExtents>([0-9a-f]{32})<", folder_xml(TEMPLATES[edition]))[1]
+
+    # The overlay is the last item: 300 frames at 60 fps.
+    assert struct.unpack("<dd", bytes.fromhex(extents)) == (0.0, 5.0)
 
 
 @pytest.mark.parametrize("edition", sorted(TEMPLATES))
@@ -101,3 +120,19 @@ def test_a_clip_still_referenced_elsewhere_is_refused():
 
     with pytest.raises(ValueError, match="still referenced"):
         remove_timeline_clip.without_clip(xml, "old.mov")
+
+
+def test_a_media_pool_item_still_used_by_a_timeline_is_refused():
+    folder = (
+        " <MediaVec>\n  <Element>\n"
+        '   <Sm2MpAudioClip DbId="0b5c7b9a-0002">\n    <Name>song.mp3</Name>\n'
+        "   </Sm2MpAudioClip>\n  </Element>\n </MediaVec>\n"
+    )
+    timeline = "<MediaRef>0b5c7b9a-0002</MediaRef>"
+
+    with pytest.raises(ValueError, match="still referenced"):
+        remove_timeline_clip.without_pool_item(folder, "song.mp3", [timeline])
+
+    updated, removed = remove_timeline_clip.without_pool_item(folder, "song.mp3", [])
+    assert removed == ["0b5c7b9a-0002"]
+    assert "song.mp3" not in updated
