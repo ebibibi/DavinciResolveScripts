@@ -142,6 +142,87 @@
         1.5,
         1.8
       ]
+    },
+    "outro": {
+      "title": "End card: the channel's range, then like / subscribe / join",
+      "kind": "outro",
+      "output": "EBI_CHAN_OUTRO",
+      "sound": "outro_music",
+      "beats": 20,
+      "hitBeat": 8,
+      "riser": [
+        6,
+        7.8
+      ],
+      "range": {
+        "words": [
+          "オンプレ",
+          "クラウド",
+          "生成AI"
+        ],
+        "at": [
+          0.5,
+          1.5,
+          2.5
+        ],
+        "tagline": "ぜんぶ、ここで解説します",
+        "taglineAt": 3.5
+      },
+      "topics": [
+        [
+          "Windows Server",
+          "Active Directory",
+          "Hyper-V",
+          "Windows 11",
+          "PowerShell",
+          "DNS / DHCP",
+          "グループポリシー"
+        ],
+        [
+          "Azure",
+          "Azure Arc",
+          "Microsoft 365",
+          "Entra ID",
+          "Intune",
+          "Exchange Online",
+          "Teams",
+          "SharePoint"
+        ],
+        [
+          "Copilot",
+          "Claude Code",
+          "生成AI",
+          "AIエージェント",
+          "Azure OpenAI",
+          "MCP",
+          "自動化"
+        ]
+      ],
+      "cta": [
+        {
+          "label": "高評価",
+          "icon": "👍",
+          "note": "参考になったら",
+          "appear": 8.5,
+          "click": 9.5
+        },
+        {
+          "label": "チャンネル登録",
+          "icon": "🔔",
+          "note": "新しい動画をお届けします",
+          "appear": 10.5,
+          "click": 11.5
+        },
+        {
+          "label": "メンバーになる",
+          "icon": "⭐",
+          "note": "メンバー限定動画も配信中",
+          "appear": 12.5,
+          "click": 13.5
+        }
+      ],
+      "thanksAt": 15.5,
+      "endAt": 18
     }
   }
 }

@@ -13,6 +13,7 @@ from . import (
     chiptune,
     data,
     engine,
+    outro_music,
     projector,
     space,
     sparkle,
@@ -31,4 +32,5 @@ SOUNDS: dict[str, Callable[[Cue], Mix]] = {
     "space": space.design,
     "data": data.design,
     "projector": projector.design,
+    "outro_music": outro_music.design,
 }
