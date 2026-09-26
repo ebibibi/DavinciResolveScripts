@@ -34,6 +34,12 @@ from auto_editor_config import (  # noqa: E402
     DEFAULT_THRESHOLD_PERCENT,
     load_auto_editor_config,
 )
+from ending_media import (  # noqa: E402
+    ENDING_FILE_NAME,
+    first_existing_path,
+    material_candidates,
+    outro_candidates,
+)
 
 TEMPLATE_NAME = "テンプレート.drp"
 CUT_LIST_NAME = "_auto_editor_cuts.json"
@@ -45,12 +51,11 @@ RECORDING_DIR_CANDIDATES = [
     r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!OBS録画',
 ]
 
-ENDING_VIDEO_CANDIDATES = [
-    r'C:\Users\masah\OneDrive - Masahiko Ebisuda (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
-    r'C:\Users\masah\OneDrive - hccjp (1)\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
-    r'C:\OneDrive\OneDrive - hccjp\Youtube動画作成場所\!動画素材\03_EBI_CHAN_IN.mov',
-]
+# 本編の後ろに付ける順: エンディング（03）→ エンドカード
+ENDING_VIDEO_CANDIDATES = material_candidates(ENDING_FILE_NAME)
+OUTRO_VIDEO_CANDIDATES = outro_candidates()
 
+# テンプレートからは外したが、手で置いた場合はその後ろから始める
 OPENING_CLIP_MARKER = "01_EBI_CHAN_OP"
 
 # 同じv3 JSONを出す --export の名前と、その版が強制する拡張子。新しい版から試す。
@@ -58,13 +63,8 @@ OPENING_CLIP_MARKER = "01_EBI_CHAN_OP"
 EXPORT_FORMATS = (("v3", ".v3"), ("json", ".json"))
 
 
-def first_existing_path(candidates):
-    """候補のうち実在する最初のパスを返す"""
-    return next((path for path in candidates if os.path.exists(path)), None)
-
-
 def find_opening_end_frame(timeline) -> int:
-    """V1のオープニングクリップの終了フレームを返す（無ければ0）"""
+    """V1のオープニングクリップの終了フレームを返す（無ければタイムラインの先頭）"""
     print("オープニングクリップを探します")
     try:
         items = timeline.GetItemsInTrack("video", 1)
@@ -79,8 +79,9 @@ def find_opening_end_frame(timeline) -> int:
     except Exception as error:
         print(f"V1トラックのアイテム取得でエラー: {error}")
 
-    print("オープニングクリップが見つかりません。タイムラインの先頭に配置します。")
-    return 0
+    start_frame = resolve_session.timeline_start_frame(timeline)
+    print(f"オープニングクリップはありません。タイムラインの先頭（{start_frame}）から配置します。")
+    return start_frame
 
 
 def clear_previous_cut_lists(output_path):
@@ -290,39 +291,92 @@ def apply_clip_properties(items, properties, label) -> int:
     return applied
 
 
-def append_ending_video(media_pool, record_frame) -> bool:
-    """エンディング動画をV1の末尾に追加する"""
-    ending_video_path = first_existing_path(ENDING_VIDEO_CANDIDATES)
-    if not ending_video_path:
-        print("! エンディング動画が見つかりません（スキップ）")
-        return False
+def placed_end_frame(appended, record_frame, clip_frames, clip_rate, timeline_rate) -> int:
+    """置いたクリップの終わりのフレーム。次のクリップはここから置く。
 
-    ending_clips = media_pool.ImportMedia([ending_video_path])
-    if not ending_clips:
-        print("✗ エンディング動画のインポートに失敗")
-        return False
-
-    ending_clip = ending_clips[0]
-    normalize_start_timecode(ending_clip)
+    Resolveが返したタイムラインアイテムの GetEnd() を信じる。読めなければ
+    Resolveが素材1フレームに割り当てるタイムラインのフレーム数から数え、
+    整数倍にならないフレームレートなら秒から数える。
+    """
     try:
-        ending_frames = int(ending_clip.GetClipProperty("Frames"))
-        appended = media_pool.AppendToTimeline([{
-            "mediaPoolItem": ending_clip,
-            "startFrame": 0,
-            "endFrame": ending_frames,
-            "recordFrame": record_frame,
-            "mediaType": dual_source.VIDEO_ONLY,
-            "trackIndex": dual_source.SLIDES_TRACK,
-        }])
+        end_frame = int(appended[0].GetEnd())
+    except (TypeError, ValueError, AttributeError, IndexError):
+        end_frame = 0
+    if end_frame > record_frame:
+        return end_frame
+    try:
+        length = clip_frames * dual_source.conform_factor(clip_rate, timeline_rate)
+    except dual_source.DualSourceError:
+        length = dual_source.seconds_to_frames(clip_frames / clip_rate, timeline_rate)
+    return record_frame + length
+
+
+def append_closing_clip(media_pool, path, record_frame, timeline_rate, label, tracks):
+    """本編の後ろにクリップを1本置き、置き終わりのフレームを返す（失敗はNone）
+
+    `tracks` は (mediaType, trackIndex) の組。映像だけなら1組、音声も使うなら
+    映像と音声の2組を同じ位置に置く。
+    """
+    clips = media_pool.ImportMedia([path])
+    if not clips:
+        print(f"✗ {label}のインポートに失敗")
+        return None
+
+    clip = clips[0]
+    normalize_start_timecode(clip)
+    try:
+        frames = int(clip.GetClipProperty("Frames"))
+        appended = media_pool.AppendToTimeline([
+            {
+                "mediaPoolItem": clip,
+                "startFrame": 0,
+                "endFrame": frames,
+                "recordFrame": record_frame,
+                "mediaType": media_type,
+                "trackIndex": track_index,
+            }
+            for media_type, track_index in tracks
+        ])
     except Exception as error:
-        print(f"✗ エンディング動画追加エラー: {error}")
-        return False
+        print(f"✗ {label}追加エラー: {error}")
+        return None
 
     if not appended:
-        print("✗ エンディング動画の追加に失敗")
-        return False
-    print("✓ エンディング動画を追加しました")
-    return True
+        print(f"✗ {label}の追加に失敗")
+        return None
+    print(f"✓ {label}を追加しました: {path}")
+    clip_rate = clip_frame_rate(clip, timeline_rate)
+    return placed_end_frame(appended, record_frame, frames, clip_rate, timeline_rate)
+
+
+def append_ending_videos(media_pool, record_frame, timeline_rate) -> int:
+    """エンディング（03、映像のみ）→ エンドカード（映像+音声）の順に置く
+
+    見つからない・置けないものは飛ばし、次はその位置から置く。
+    置き終わりのフレームを返す。
+    """
+    ending_path = first_existing_path(ENDING_VIDEO_CANDIDATES)
+    if ending_path:
+        end_frame = append_closing_clip(
+            media_pool, ending_path, record_frame, timeline_rate, "エンディング動画",
+            [(dual_source.VIDEO_ONLY, dual_source.SLIDES_TRACK)],
+        )
+        record_frame = record_frame if end_frame is None else end_frame
+    else:
+        print("! エンディング動画が見つかりません（スキップ）")
+
+    outro_path = first_existing_path(OUTRO_VIDEO_CANDIDATES)
+    if not outro_path:
+        print("! エンドカードが見つかりません（スキップ）")
+        return record_frame
+    end_frame = append_closing_clip(
+        media_pool, outro_path, record_frame, timeline_rate, "エンドカード",
+        [
+            (dual_source.VIDEO_ONLY, dual_source.SLIDES_TRACK),
+            (dual_source.AUDIO_ONLY, dual_source.CAMERA_AUDIO_TRACK),
+        ],
+    )
+    return record_frame if end_frame is None else end_frame
 
 
 def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame) -> bool:
@@ -432,7 +486,7 @@ def build_dual_source_timeline(project, media_pool, timeline, pair, start_frame)
     apply_clip_properties(slide_items, dual_source.SLIDES_PROPERTIES, "画面録画")
     apply_clip_properties(camera_items, dual_source.CAMERA_PROPERTIES, "カメラ")
 
-    append_ending_video(media_pool, plan.end_frame)
+    append_ending_videos(media_pool, plan.end_frame, frame_rate)
     return True
 
 

@@ -151,6 +151,19 @@ def timeline_frame_rate(timeline) -> float:
     return frame_rate if frame_rate > 0 else 30.0
 
 
+def timeline_start_frame(timeline) -> int:
+    """Return the first frame of the timeline (its start timecode as a frame).
+
+    A Resolve timeline usually starts at 01:00:00:00, and a record frame is
+    counted from 00:00:00:00, so frame 0 would be an hour before the timeline.
+    Falls back to 0 when the value cannot be read.
+    """
+    try:
+        return int(timeline.GetStartFrame())
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
 def finish(resolve, project, timeline) -> None:
     """Park the playhead at the start and show the result on the Edit page."""
     try:
