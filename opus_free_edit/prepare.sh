@@ -57,6 +57,13 @@ if [[ -z "$(ls frames)" ]]; then
     -q:v 4 sheets/sheet_%03d.jpg
 fi
 
+if [[ -n "${DECK_SLUG:-}" && ! -s slides/capture.json ]]; then
+  # The deck the presenter talked through; the editor places it next to the face recording.
+  log "capture deck $DECK_SLUG from ${PRESENTATIONS_REPO:-$HOME/presentations-web}"
+  (cd "${PRESENTATIONS_REPO:-$HOME/presentations-web}" && npm run -s build >/dev/null \
+    && npm run -s capture:video -- "$DECK_SLUG" "$JOB/slides") > work/capture.log 2>&1
+fi
+
 python3 - <<PY
 import json, pathlib
 p = json.load(open("input/probe.json"))

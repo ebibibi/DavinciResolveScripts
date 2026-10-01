@@ -16,6 +16,12 @@ the fonts `Noto Sans CJK JP` / `Noto Sans CJK JP Black`).
 - `frames/f_NNNNN.jpg` – one frame every 10 s (frame N is at (N-1)*10 s); `sheets/sheet_NNN.jpg` – 4x4 contact sheets with timestamps
 - `assets/EBI_CHAN_OUTRO.mp4` – the channel's 20 s end card (use it at the end)
 - `assets/eyecatch/*.mp4` – short branded stingers you may use between chapters
+- `slides/` (only when the recording was made while presenting a deck): `stills/slide_NN.png`
+  (1280x1080 finished slides), `capture.json` (id, title, speaker notes, entrance timing) and
+  `video/session.webm` (entrance animations, slide area x 0-1280). The deck canvas is designed for
+  slide-left 1280 px + presenter-right 640 px. Decide when to show slides, the face, or both: align
+  each slide to the moment he starts talking about it, never show a slide he is not talking about,
+  and use the variety of layouts to keep the video lively for a reason.
 - `context/youtube-winning-pattern.md` – what has worked on this channel (titles, hooks, structure)
 
 Extract more frames or audio snippets whenever you need to look closer. Look at the screen:
