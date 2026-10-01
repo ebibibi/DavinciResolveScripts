@@ -45,3 +45,27 @@ One real recording (46:40, 1080p60, face-to-camera talk, no screen share) edited
 
 - Run the proxy render in parallel with Whisper (the proxy took 10 of the 15 preparation minutes).
 - Tune the silence map per recording from the measured noise floor.
+
+## Revisions after the presenter's review (2026-10-01)
+
+Review of v1: "surprisingly good", with four defects - typing-only stretches kept, 1.2x punch-in
+too close, on-screen text leaving before the point ended, and dozens of 1-3 frame flickers.
+
+| version | change | agent wall time | API time | cache read | output | API-equivalent USD |
+|---|---|---:|---:|---:|---:|---:|
+| v2 | the four fixes, face only | 60.4 min | 12.4 min | 12,269,328 | 75,182 | 5.58 |
+| v3 | adds the presented deck (25 slides) | 99.9 min | 21.2 min | 21,309,338 | 126,990 | 9.20 |
+
+- Typing: speech is now "Whisper words or voice periodicity" (autocorrelation pitch in 70-400 Hz);
+  typing is loud but aperiodic. Anything else longer than 0.7 s is cut.
+- Zoom: 1.08x. Flicker: framing is a per-segment attribute on integer frames, verified by a
+  frame-difference scan of the whole render.
+- v3 layouts, chosen by the agent: slide 1280 + face column 640 (13.4 min), full face for stories,
+  opinions and jokes (15.3 min), enlarged table + round face picture-in-picture while numbers are
+  read out (2.8 min). Slides are matched to the first word of the point, not to deck order (63
+  scenes). Slide text and burned-in text never overlap.
+- The deck is captured with `npm run capture:video` in presentations-web (`DECK_SLUG` in
+  `prepare.sh`). The first capture recorded only an 800x600 corner; fixed with an explicit window
+  size.
+- Agent proposals for the slide + face workflow: log slide changes during recording, expose table
+  rectangles in the capture metadata, write deck notes as ordered talking points.

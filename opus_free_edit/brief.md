@@ -60,6 +60,11 @@ much of the value in these recordings is what is shown, not only what is said.
   - **No flicker.** Decide framing per frame index from the same integer frame counts used to cut
     (never from rounded continuous times), change framing only at a cut, keep each framing state at
     least about 1 s, and scan the final render for 1-3 frame anomalies before finishing.
+  - **One integer clock for every input.** When several streams are combined (camera, slides,
+    picture-in-picture), give each `settb=1/FPS,setpts=N` before overlaying; never use
+    `setpts=N/FPS/TB` on inputs whose time bases differ (it drifts by a frame every few frames).
+  - **Never show slide text and burned-in text at the same time.** Lower thirds, panels and
+    chapter tags belong to face-only stretches.
 - Keep an edit decision list you can re-render from (e.g. `work/edl.json` + a render script) so
   that fixing one decision does not mean starting over.
 - Render previews from the proxy first, **look at frames from your preview** (especially around
