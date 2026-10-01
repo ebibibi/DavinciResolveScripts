@@ -291,6 +291,9 @@ window.renderFrame = function (frame) {
   const cue = { ...variantSpec, hit: hitBeat };
   const sceneCtx = scene.getContext('2d');
   const accumCtx = accum.getContext('2d');
+  // The logo is stored well above its largest on-screen size, so shrink it with
+  // the high-quality filter; the default one aliases at these ratios.
+  sceneCtx.imageSmoothingQuality = 'high';
 
   // Motion blur: draw the scene at several instants inside the shutter and average.
   for (let s = 0; s < SUBFRAMES; s++) {
