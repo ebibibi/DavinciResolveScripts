@@ -43,6 +43,17 @@ much of the value in these recordings is what is shown, not only what is said.
   retakes, dead time, off-topic tangents, technical trouble), chapters, on-screen text, emphasis,
   zooms on small UI text, stingers, anything that makes it better to watch. Do not invent facts:
   on-screen text must be grounded in what is said or shown.
+- House rules learned from the presenter's review (non-negotiable):
+  - **Cut every span without speech**, including typing, clicking or rustling. Loudness is not
+    speech: find gaps from the transcript word timestamps (no words for more than about 1 s) and
+    check them, instead of trusting the silence map alone.
+  - **Zoom gently or not at all.** Never more than about 1.1x, keep head and shoulders with
+    headroom. A close-up of the face is unpleasant to him.
+  - **Keep on-screen text up while its point is being talked about**, until the topic changes,
+    not for a fixed few seconds.
+  - **No flicker.** Decide framing per frame index from the same integer frame counts used to cut
+    (never from rounded continuous times), change framing only at a cut, keep each framing state at
+    least about 1 s, and scan the final render for 1-3 frame anomalies before finishing.
 - Keep an edit decision list you can re-render from (e.g. `work/edl.json` + a render script) so
   that fixing one decision does not mean starting over.
 - Render previews from the proxy first, **look at frames from your preview** (especially around

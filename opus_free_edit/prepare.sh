@@ -2,6 +2,7 @@
 # Deterministic preprocessing for one recording. Everything editorial is left to the agent.
 # Usage: prepare.sh <source video> <job dir>
 set -euo pipefail
+PROXY_PID=
 
 SOURCE=$(realpath "$1")
 JOB=$(realpath -m "$2")
@@ -23,9 +24,12 @@ if [[ ! -s input/audio.wav ]]; then
 fi
 
 if [[ ! -s input/proxy.mp4 ]]; then
+  # runs in the background while Whisper works on the GPU host
   log "render 540p proxy for fast previews"
   ffmpeg -nostdin -v error -y -i input/source.mkv -vf "scale=-2:540,fps=30" \
-    -c:v libx264 -preset veryfast -crf 26 -c:a aac -b:a 128k input/proxy.mp4
+    -c:v libx264 -preset veryfast -crf 26 -c:a aac -b:a 128k input/proxy.mp4.tmp.mp4 \
+    && mv input/proxy.mp4.tmp.mp4 input/proxy.mp4 &
+  PROXY_PID=$!
 fi
 
 if [[ ! -s input/transcript.json ]]; then
@@ -37,6 +41,8 @@ if [[ ! -s input/transcript.json ]]; then
     --language Japanese --word_timestamps True --output_dir '$remote' --output_format all" > work/whisper.log 2>&1
   for ext in json srt txt vtt tsv; do scp -q "$WHISPER_HOST:$remote/audio.$ext" "input/transcript.$ext"; done
 fi
+
+if [[ -n "${PROXY_PID:-}" ]]; then log "wait for proxy"; wait "$PROXY_PID"; fi
 
 log "silence map"
 ffmpeg -nostdin -v info -i input/audio.wav -af silencedetect=noise=-35dB:d=0.4 -f null - 2>&1 \

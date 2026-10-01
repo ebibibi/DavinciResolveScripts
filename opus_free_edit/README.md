@@ -14,7 +14,7 @@ Only the steps that are the same for every recording are scripted:
 | silence map, frames every 10 s, 4x4 contact sheets | `prepare.sh` | inputs for the agent |
 | the edit | `claude -p` with `brief.md` | model: `EDIT_MODEL` (default `claude-opus-5-5`) |
 | token and cost summary | `usage_report.py` | reads the stream-json log |
-| private upload with title, captions, thumbnail | `upload_private.py` | never public |
+| private upload with title, captions, thumbnail | `upload_private.py` | never public; leaves `~/video-jobs/handoff/<video_id>/` so the post-upload automation keeps the editor thumbnail |
 
 ```bash
 WINNING_PATTERN=/path/to/winning-pattern.md \
