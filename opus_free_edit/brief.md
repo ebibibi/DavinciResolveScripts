@@ -65,6 +65,10 @@ much of the value in these recordings is what is shown, not only what is said.
     `setpts=N/FPS/TB` on inputs whose time bases differ (it drifts by a frame every few frames).
   - **Never show slide text and burned-in text at the same time.** Lower thirds, panels and
     chapter tags belong to face-only stretches.
+  - **Round face picture-in-picture: frame the whole head, not the top of it.** Centre the
+    circle crop lower than the eyes (around the mouth/chin), with a little space above the hair
+    and the chin and neck visible. In the 2026-10-01 review the circle cut off too much of the
+    lower face.
 - Keep an edit decision list you can re-render from (e.g. `work/edl.json` + a render script) so
   that fixing one decision does not mean starting over.
 - Render previews from the proxy first, **look at frames from your preview** (especially around
