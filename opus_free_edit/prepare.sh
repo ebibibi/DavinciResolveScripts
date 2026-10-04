@@ -9,6 +9,9 @@ JOB=$(realpath -m "$2")
 FRAME_EVERY=${FRAME_EVERY:-10}
 WHISPER_HOST=${WHISPER_HOST:-spark}
 WHISPER_MODEL=${WHISPER_MODEL:-large-v3-turbo}
+# Bias Whisper towards the presenter's name and the sign-off he says at the end of every video.
+# Without it the name comes out as エビスタ/ヘビスタ and the sign-off as ステイフリッシュ.
+WHISPER_PROMPT=${WHISPER_PROMPT:-"胡田昌彦です。この動画は以上です。Stay Hungry. Stay Foolish. 胡田でした。"}
 
 mkdir -p "$JOB"/{input,work,frames,sheets,out}
 cd "$JOB"
@@ -38,7 +41,8 @@ if [[ ! -s input/transcript.json ]]; then
   trap 'ssh "$WHISPER_HOST" "rm -rf $remote" || true' EXIT
   scp -q input/audio.wav "$WHISPER_HOST:$remote/audio.wav"
   ssh "$WHISPER_HOST" "~/whisper-env/bin/whisper '$remote/audio.wav' --device cuda --model $WHISPER_MODEL \
-    --language Japanese --word_timestamps True --output_dir '$remote' --output_format all" > work/whisper.log 2>&1
+    --language Japanese --word_timestamps True --initial_prompt '$WHISPER_PROMPT' \
+    --output_dir '$remote' --output_format all" > work/whisper.log 2>&1
   for ext in json srt txt vtt tsv; do scp -q "$WHISPER_HOST:$remote/audio.$ext" "input/transcript.$ext"; done
 fi
 
