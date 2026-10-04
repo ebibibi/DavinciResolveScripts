@@ -3,6 +3,7 @@
 # Usage: prepare.sh <source video> <job dir>
 set -euo pipefail
 PROXY_PID=
+HERE=$(cd "$(dirname "$0")" && pwd)
 
 SOURCE=$(realpath "$1")
 JOB=$(realpath -m "$2")
@@ -10,8 +11,9 @@ FRAME_EVERY=${FRAME_EVERY:-10}
 WHISPER_HOST=${WHISPER_HOST:-spark}
 WHISPER_MODEL=${WHISPER_MODEL:-large-v3-turbo}
 # Bias Whisper towards the presenter's name and the sign-off he says at the end of every video.
-# Without it the name comes out as エビスタ/ヘビスタ and the sign-off as ステイフリッシュ.
-WHISPER_PROMPT=${WHISPER_PROMPT:-"胡田昌彦です。この動画は以上です。Stay Hungry. Stay Foolish. 胡田でした。"}
+# Describe them, do not quote the sentence: a prompt containing the exact sentence makes Whisper
+# skip that sentence in the audio. fix_transcript.py normalises whatever variants remain.
+WHISPER_PROMPT=${WHISPER_PROMPT:-"話し手は胡田昌彦（えびすだ まさひこ）。締めの決め台詞は Stay Hungry. Stay Foolish."}
 
 mkdir -p "$JOB"/{input,work,frames,sheets,out}
 cd "$JOB"
@@ -44,6 +46,7 @@ if [[ ! -s input/transcript.json ]]; then
     --language Japanese --word_timestamps True --initial_prompt '$WHISPER_PROMPT' \
     --output_dir '$remote' --output_format all" > work/whisper.log 2>&1
   for ext in json srt txt vtt tsv; do scp -q "$WHISPER_HOST:$remote/audio.$ext" "input/transcript.$ext"; done
+  python3 "$HERE/fix_transcript.py" input/transcript
 fi
 
 if [[ -n "${PROXY_PID:-}" ]]; then log "wait for proxy"; wait "$PROXY_PID"; fi
