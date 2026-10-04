@@ -37,6 +37,11 @@ much of the value in these recordings is what is shown, not only what is said.
 3. `out/captions.srt` – Japanese captions timed to `final.mp4` (correct obvious Whisper mistakes,
    especially product names).
 4. `out/thumbnail.png` – 1280x720 thumbnail (optional but encouraged; follow the winning pattern).
+   **The presenter's whole head must be visible**: no headline glyph, panel, gradient or logo over the
+   hair, ears or face. Save the unmodified video frame you cut the photo from as
+   `work/thumbnail_source.png`, run `python3 check_thumbnail.py out/thumbnail.png --source
+   work/thumbnail_source.png` (in this directory) and look at `out/thumbnail.faces.png`. A rejected
+   thumbnail must be redone, not shipped; the harness refuses to upload it.
 5. `out/EDIT_NOTES.md` – in Japanese: what you understood the video to be about, who it is for,
    every significant decision (what you cut and why, what you added and why), what you tried and
    rejected, what you would do with more time, and **which of your steps felt mechanical enough to
@@ -50,6 +55,16 @@ much of the value in these recordings is what is shown, not only what is said.
   zooms on small UI text, stingers, anything that makes it better to watch. Do not invent facts:
   on-screen text must be grounded in what is said or shown.
 - House rules learned from the presenter's review (non-negotiable):
+  - **Never trust a word timestamp across a pause.** Whisper sometimes stretches one word over a
+    silence (2026-10-04: 「構」 spanned 390.2-396.6 s while the audio sat at -65 dB, so a 6.9 s
+    silence survived the cut). Treat any word longer than about 0.8 s as suspect and check the
+    audio level there. Before finishing, run `python3 check_silence.py out/final.mp4 --ignore <ranges
+    of inserted clips, stingers and the end card>` and cut every silence it reports in the
+    presenter's parts.
+  - **The sign-off is always 「Stay Hungry. Stay Foolish.」** (Steve Jobs, Stanford 2005), followed by
+    「胡田でした」. Write it exactly like that in captions and telops however it was transcribed
+    (ステイハングリー／ステイフリッシュ／ステイフーリッシュ …). His name is 胡田 (えびすだ), never
+    エビスタ／ヘビスタ／恵比寿.
   - **Cut every span without speech**, including typing, clicking or rustling. Loudness is not
     speech: find gaps from the transcript word timestamps (no words for more than about 1 s) and
     check them, instead of trusting the silence map alone.

@@ -11,10 +11,13 @@ Only the steps that are the same for every recording are scripted:
 |---|---|---|
 | probe, 16 kHz audio, 540p proxy | `prepare.sh` | proxy is used for previews |
 | Whisper large-v3-turbo with word timestamps | `prepare.sh` | runs on the GPU host (`WHISPER_HOST`, default `spark`) |
+| name and sign-off normalised in the transcript | `fix_transcript.py` | Whisper prompt describes them; the script fixes remaining variants |
 | silence map, frames every 10 s, 4x4 contact sheets | `prepare.sh` | inputs for the agent |
 | slides of the deck that was presented (optional) | `prepare.sh` with `DECK_SLUG` | uses `npm run capture:video` in presentations-web (`PRESENTATIONS_REPO`) |
 | the edit | `claude -p` with `brief.md` | model: `EDIT_MODEL` (default `claude-opus-5-5`) |
 | token and cost summary | `usage_report.py` | reads the stream-json log |
+| thumbnail must show the whole head (gate before upload) | `check_thumbnail.py` | YuNet face detector; rejects text, panels, gradients or the logo over the head |
+| no silence left in the presenter's parts | `check_silence.py` | measured from the audio, not from Whisper word timestamps |
 | private upload with title, captions, thumbnail | `upload_private.py` | never public; leaves `~/video-jobs/handoff/<video_id>/` so the post-upload automation keeps the editor thumbnail |
 
 ```bash

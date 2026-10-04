@@ -17,6 +17,7 @@ mkdir -p "$JOB/context"
 ln -sfn "$REPO/assets" "$JOB/assets"
 [[ -n "$WINNING_PATTERN" && -f "$WINNING_PATTERN" ]] && cp "$WINNING_PATTERN" "$JOB/context/youtube-winning-pattern.md"
 cp "$HERE/brief.md" "$JOB/BRIEF.md"
+cp "$HERE/check_thumbnail.py" "$HERE/check_silence.py" "$JOB/"
 
 log "agent edit with $MODEL"
 cd "$JOB"
@@ -27,6 +28,12 @@ t2=$(date +%s)
 
 python3 "$HERE/usage_report.py" work/agent.jsonl > out/USAGE.md
 [[ -s out/final.mp4 ]] || { log "no out/final.mp4 – stopping before upload"; exit 1; }
+THUMB_SOURCE=()
+[[ -s work/thumbnail_source.png ]] && THUMB_SOURCE=(--source work/thumbnail_source.png)
+if [[ -s out/thumbnail.png ]] && ! python3 "$HERE/check_thumbnail.py" out/thumbnail.png "${THUMB_SOURCE[@]}"; then
+  log "thumbnail hides the presenter's face – stopping before upload (fix out/thumbnail.png and rerun the upload)"
+  exit 1
+fi
 
 if [[ "$UPLOAD" != "--no-upload" ]]; then
   log "private upload"
