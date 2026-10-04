@@ -55,6 +55,11 @@ much of the value in these recordings is what is shown, not only what is said.
   zooms on small UI text, stingers, anything that makes it better to watch. Do not invent facts:
   on-screen text must be grounded in what is said or shown.
 - House rules learned from the presenter's review (non-negotiable):
+  - **Burn captions into every stretch where the presenter talks, and still deliver
+    `out/captions.srt`** for the YouTube caption track (2026-10-04 request). Bottom centre, bold Noto
+    Sans CJK JP about 62 px at 1080p, white with a dark outline. Lift them above any lower-third while it
+    is on screen. Do not burn them over inserted clips that already carry their own captions (e.g. the
+    えびフライ part) or over stingers and the end card.
   - **Never trust a word timestamp across a pause.** Whisper sometimes stretches one word over a
     silence (2026-10-04: 「構」 spanned 390.2-396.6 s while the audio sat at -65 dB, so a 6.9 s
     silence survived the cut). Treat any word longer than about 0.8 s as suspect and check the
