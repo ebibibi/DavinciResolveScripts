@@ -17,7 +17,7 @@ mkdir -p "$JOB/context"
 ln -sfn "$REPO/assets" "$JOB/assets"
 [[ -n "$WINNING_PATTERN" && -f "$WINNING_PATTERN" ]] && cp "$WINNING_PATTERN" "$JOB/context/youtube-winning-pattern.md"
 cp "$HERE/brief.md" "$JOB/BRIEF.md"
-cp "$HERE/check_thumbnail.py" "$HERE/check_silence.py" "$JOB/"
+cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/check_silence.py" "$JOB/"
 
 log "agent edit with $MODEL"
 cd "$JOB"
