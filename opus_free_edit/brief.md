@@ -37,11 +37,21 @@ much of the value in these recordings is what is shown, not only what is said.
 3. `out/captions.srt` – Japanese captions timed to `final.mp4` (correct obvious Whisper mistakes,
    especially product names).
 4. `out/thumbnail.png` – 1280x720 thumbnail (optional but encouraged; follow the winning pattern).
-   **The presenter's whole head must be visible**: no headline glyph, panel, gradient or logo over the
-   hair, ears or face. Save the unmodified video frame you cut the photo from as
-   `work/thumbnail_source.png`, run `python3 check_thumbnail.py out/thumbnail.png --source
-   work/thumbnail_source.png` (in this directory) and look at `out/thumbnail.faces.png`. A rejected
-   thumbnail must be redone, not shipped; the harness refuses to upload it.
+   **Generate the whole picture with AI, using his face as the reference** (2026-10-05 review: a video
+   frame with headline text laid next to it looked weak – "use my face, generate everything else, a
+   normal YouTube thumbnail is better"). Save a sharp frame where he looks at the camera as
+   `work/thumbnail_frame.png` and run, in this directory:
+   `python3 ai_thumbnail.py work/thumbnail_frame.png --headline "<3-7 chars, e.g. EWS廃止>" --sub
+   "<product, e.g. Exchange Online>" --badge "<series label, e.g. MS週報, or omit>" --motif "<in English:
+   the product of the week's biggest change, shown breaking or changing>"`.
+   The series label (e.g. **MS週報**) must stand out as a big program-logo badge. Never ask for another
+   expression or pose (surprised face, pointing): the model then redraws his face and it is no longer
+   him – that variant was rejected. Look at the result: same face as the photo, whole head visible,
+   nothing over the hair or face, every word spelt exactly. Regenerate (it is cheap) until it is right;
+   if it never is, fall back to a real frame plus text and then save that frame as
+   `work/thumbnail_source.png` and run `python3 check_thumbnail.py out/thumbnail.png --source
+   work/thumbnail_source.png` (do **not** save `thumbnail_source.png` for an AI thumbnail: the pixel
+   comparison only works for a pasted photo). The harness refuses to upload a rejected thumbnail.
 5. `out/EDIT_NOTES.md` – in Japanese: what you understood the video to be about, who it is for,
    every significant decision (what you cut and why, what you added and why), what you tried and
    rejected, what you would do with more time, and **which of your steps felt mechanical enough to
