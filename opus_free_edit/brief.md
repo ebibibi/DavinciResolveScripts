@@ -86,8 +86,9 @@ much of the value in these recordings is what is shown, not only what is said.
   - **Cut every span without speech**, including typing, clicking or rustling. Loudness is not
     speech: find gaps from the transcript word timestamps (no words for more than about 1 s) and
     check them, instead of trusting the silence map alone.
-  - **Zoom gently or not at all.** Never more than about 1.1x, keep head and shoulders with
-    headroom. A close-up of the face is unpleasant to him.
+  - **Zoom gently or not at all.** Never more than about 1.15x, keep head and shoulders with
+    headroom. A close-up of the face is unpleasant to him. (2026-10-06: the camera now sits
+    farther back, so the cap rose from 1.1x; 1.2x on the old framing was too close.)
   - **Keep on-screen text up while its point is being talked about**, until the topic changes,
     not for a fixed few seconds.
   - **No flicker.** Decide framing per frame index from the same integer frame counts used to cut
