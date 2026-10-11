@@ -97,6 +97,11 @@ much of the value in these recordings is what is shown, not only what is said.
   - **One integer clock for every input.** When several streams are combined (camera, slides,
     picture-in-picture), give each `settb=1/FPS,setpts=N` before overlaying; never use
     `setpts=N/FPS/TB` on inputs whose time bases differ (it drifts by a frame every few frames).
+  - **A reordered block must not freeze the presenter.** A frame reader that only decodes forward
+    repeats its last frame when the plan jumps back in the source (e.g. a conclusion moved before the
+    subscribe request). Reopen or seek the decoder whenever the next source frame is behind the
+    current one or far ahead, and before upload measure the presenter area of `out/final.mp4` for
+    stretches of 3 s or more with no frame-to-frame change (end card and stingers excepted).
   - **Never show slide text and burned-in text at the same time.** Lower thirds, panels and
     chapter tags belong to face-only stretches.
   - **Round face picture-in-picture: frame the whole head, not the top of it.** Centre the
