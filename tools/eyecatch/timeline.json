@@ -151,8 +151,8 @@
         3.8
       ],
       "sound": "subscribe",
-      "beats": 6,
-      "hitBeat": 4,
+      "beats": 7,
+      "hitBeat": 5,
       "every": 0.7,
       "lines": [
         "チャンネル登録",
@@ -164,7 +164,11 @@
         "glasses",
         "rockstar"
       ],
-      "calm": true
+      "calm": true,
+      "voice": {
+        "file": "sounds/voice/subscribe.wav",
+        "at": 0.4
+      }
     },
     "outro": {
       "title": "End card: full-screen channel showcase, then the end-screen layout",

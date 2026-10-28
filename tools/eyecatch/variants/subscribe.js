@@ -61,7 +61,7 @@ function speechBubble(ctx, beat, cue) {
     ctx.fillText(first, 0, 0);
     ctx.restore();
   }
-  const s2 = span(beat, 0.9, 0.4, ease.expoOut);
+  const s2 = span(beat, 2.0, 0.4, ease.expoOut);  // with 「お願いします」 in the voice
   if (s2 > 0) {
     ctx.save();
     ctx.translate(0, 65);
