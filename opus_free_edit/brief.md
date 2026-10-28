@@ -83,6 +83,11 @@ much of the value in these recordings is what is shown, not only what is said.
     「胡田でした」. Write it exactly like that in captions and telops however it was transcribed
     (ステイハングリー／ステイフリッシュ／ステイフーリッシュ …). His name is 胡田 (えびすだ), never
     エビスタ／ヘビスタ／恵比寿.
+  - **The presenter must be on both channels.** The microphone is sometimes recorded on the left
+    channel only (2026-10-28: the final had his voice in the left ear and the right channel at about
+    -55 dB, so it sounded silent). Measure each channel of the source; if one side is silent, take the
+    microphone channel and put it on both. Run `python3 check_stereo.py out/final.mp4` before finishing;
+    the harness refuses to upload a video that fails it.
   - **Cut every span without speech**, including typing, clicking or rustling. Loudness is not
     speech: find gaps from the transcript word timestamps (no words for more than about 1 s) and
     check them, instead of trusting the silence map alone.
