@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 
 from cue import Cue
-from synth import RATE, Mix, decay, highpass, lowpass, noise, note, osc, supersaw, times
+from synth import RATE, Mix, decay, highpass, kick, lowpass, noise, note, osc, supersaw, times
 
 
 def design(cue: Cue) -> Mix:
@@ -14,7 +14,7 @@ def design(cue: Cue) -> Mix:
     mix = Mix(cue.total_s)
     voice = cue.spec.get("voice")
     if voice:
-        mix.add(_load_voice(Path(__file__).resolve().parent.parent / voice["file"]), cue.seconds(voice["at"]), 0.9)
+        mix.add(_load_voice(Path(__file__).resolve().parent.parent / voice["file"]), cue.seconds(voice["at"]), 0.6)
     every = cue.spec["every"]
     for i, midi in enumerate((72, 76, 79, 84)[:len(cue.spec["poses"])]):
         at = cue.seconds(0.4 + i * every)
@@ -25,12 +25,13 @@ def design(cue: Cue) -> Mix:
 
     hit, tail = cue.hit_s, cue.total_s - cue.hit_s
     mix.add(highpass(noise(0.015, 5), 0.3) * decay(0.015, 250), hit, 0.45)
+    mix.add(kick(0.3, 120, 50), hit, 0.55)
     for k, (midi, delay) in enumerate(((88, 0.0), (95, 0.16))):
         t = times(1.4)
         bell = osc(note(midi), 1.4) + 0.4 * osc(note(midi) * 2.76, 1.4)
         mix.add(bell * np.exp(-t * 3.2), hit + delay, 0.16, (-0.25, 0.25)[k])
     pad = lowpass(supersaw((60, 64, 67, 71), tail, "triangle"), 0.06)
-    mix.add(pad * decay(tail, 1.0, 0.08), hit, 0.6)
+    mix.add(pad * decay(tail, 1.0, 0.03), hit, 0.9)
     return mix
 
 
