@@ -1,6 +1,6 @@
 # Eyecatch stingers from code
 
-Ten two-second branded stingers plus the three-second `subscribe` call (1920x1080, 60 fps, stereo 48 kHz) for chapter
+Ten two-second branded stingers plus the 3.5-second `subscribe` call (1920x1080, 60 fps, stereo 48 kHz) for chapter
 breaks, rendered entirely from code. They sit alongside the three hand-made
 clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 `01_EBI_CHAN_OP` is no longer part of the Resolve template.
@@ -17,7 +17,7 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 | `orbit` | planets circle on tilted orbits, speed up and spiral into the centre | sonar pings echoing through space, a warbling FM pad that climbs, then a deep boom and FM bells |
 | `pixelate` | the logo arrives as coarse pixels and sharpens one step per beat | data chatter that gets faster and higher each step, bit-crushed, then a two-tone "done" chime |
 | `countdown` | an old film leader counts 4-3-2-1 with a sweeping hand, scratches and flicker | projector rattle at 24 clicks a second, a beep per number, then an orchestral hit |
-| `subscribe` | 3 s, deliberately calm (`calm: true` skips the glitch). Under a 「チャンネル登録お願いします！」 bubble four えびフライ poses rise in one by one and stay side by side; on the hit the subscribe button is clicked and they hop once | a soft marimba note per pose, then a click, a bell and a warm chord |
+| `subscribe` | 3.5 s, deliberately calm (`calm: true` skips the glitch). Under a 「チャンネル登録お願いします！」 bubble four えびフライ poses rise in one by one and stay side by side; on the hit the subscribe button is clicked and they hop once | えびフライ says 「チャンネル登録お願いします！」 (`sounds/voice/subscribe.wav`, Gemini TTS Fenrir — the explainer videos' voice — generated once and committed, so re-rendering is free) over soft marimba notes, then a click, a bell and a warm chord |
 
 ## End card (`outro`)
 
