@@ -17,7 +17,7 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 | `orbit` | planets circle on tilted orbits, speed up and spiral into the centre | sonar pings echoing through space, a warbling FM pad that climbs, then a deep boom and FM bells |
 | `pixelate` | the logo arrives as coarse pixels and sharpens one step per beat | data chatter that gets faster and higher each step, bit-crushed, then a two-tone "done" chime |
 | `countdown` | an old film leader counts 4-3-2-1 with a sweeping hand, scratches and flicker | projector rattle at 24 clicks a second, a beep per number, then an orchestral hit |
-| `subscribe` | 3 s. えびフライ pops in in seven poses (one per half beat) under a 「チャンネル登録お願いします！」 bubble; on the hit all seven line up and the subscribe button is clicked | a cartoon pop per pose climbing the scale, a riser, then a click, a notification bell and brass |
+| `subscribe` | 3 s, deliberately calm (`calm: true` skips the glitch). Under a 「チャンネル登録お願いします！」 bubble four えびフライ poses rise in one by one and stay side by side; on the hit the subscribe button is clicked and they hop once | a soft marimba note per pose, then a click, a bell and a warm chord |
 
 ## End card (`outro`)
 

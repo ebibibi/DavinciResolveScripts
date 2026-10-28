@@ -313,7 +313,8 @@ window.renderFrame = function (frame) {
     span(beat, hitBeat - 0.3, 0.3) * (beat < hitBeat ? 0.6 : 0),
     1 - span(beat, hitBeat, 0.2),
   );
-  if (glitchStrength > 0.05 && beat >= hitBeat - 0.3 && beat < hitBeat + 0.2) {
+  // a calm variant (subscribe) skips the RGB-split glitch around the hit
+  if (!variantSpec.calm && glitchStrength > 0.05 && beat >= hitBeat - 0.3 && beat < hitBeat + 0.2) {
     glitch(ctx, accum, frame, glitchStrength);
   } else {
     ctx.drawImage(accum, 0, 0);
