@@ -143,6 +143,22 @@
         1.8
       ]
     },
+    "subscribe": {
+      "title": "えびフライ asks for a subscription in seven poses",
+      "ticks": [],
+      "riser": [
+        3.0,
+        3.8
+      ],
+      "sound": "subscribe",
+      "beats": 6,
+      "hitBeat": 4,
+      "every": 0.5,
+      "lines": [
+        "チャンネル登録",
+        "お願いします！"
+      ]
+    },
     "outro": {
       "title": "End card: full-screen channel showcase, then the end-screen layout",
       "kind": "outro",

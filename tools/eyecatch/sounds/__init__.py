@@ -17,6 +17,7 @@ from . import (
     projector,
     space,
     sparkle,
+    subscribe,
     typewriter,
     water,
 )
@@ -32,5 +33,6 @@ SOUNDS: dict[str, Callable[[Cue], Mix]] = {
     "space": space.design,
     "data": data.design,
     "projector": projector.design,
+    "subscribe": subscribe.design,
     "outro_music": outro_music.design,
 }

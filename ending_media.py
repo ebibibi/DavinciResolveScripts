@@ -32,6 +32,7 @@ BUNDLED_OUTRO_PATH = ASSETS_DIR / OUTRO_FILE_NAME
 EYECATCH_VARIANTS = (
     "assemble", "bounce", "morph", "tunnel", "typewriter",
     "ripple", "slice", "orbit", "pixelate", "countdown",
+    "subscribe",
 )
 
 

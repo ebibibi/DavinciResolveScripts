@@ -16,6 +16,9 @@ the fonts `Noto Sans CJK JP` / `Noto Sans CJK JP Black`).
 - `frames/f_NNNNN.jpg` – one frame every 10 s (frame N is at (N-1)*10 s); `sheets/sheet_NNN.jpg` – 4x4 contact sheets with timestamps
 - `assets/EBI_CHAN_OUTRO.mp4` – the channel's 20 s end card (use it at the end)
 - `assets/eyecatch/*.mp4` – short branded stingers you may use between chapters
+  (`EBI_CHAN_EYECATCH_subscribe.mp4` is the 3 s 「チャンネル登録お願いします！」 call by えびフライ: use it once
+  per video, at a natural break around the middle, e.g. right after a key point lands — not at the very start
+  and not next to the end card, which already asks for subscriptions)
 - `slides/` (only when the recording was made while presenting a deck): `stills/slide_NN.png`
   (1280x1080 finished slides), `capture.json` (id, title, speaker notes, entrance timing) and
   `video/session.webm` (entrance animations, slide area x 0-1280). The deck canvas is designed for

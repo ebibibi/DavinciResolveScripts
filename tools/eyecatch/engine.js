@@ -279,7 +279,7 @@ window.setup = async function (config, variantName, logoUrl) {
   variant = variants[variantName];
   variantSpec = config.variants[variantName];
   if (!variant) throw new Error(`Unknown variant: ${variantName}`);
-  variant.setup();
+  await variant.setup();
   // A variant may run longer than a stinger (the end card does) and hit elsewhere.
   const beats = variantSpec.beats ?? config.beats;
   return Math.round((beats * 60 / config.bpm) * config.fps);
