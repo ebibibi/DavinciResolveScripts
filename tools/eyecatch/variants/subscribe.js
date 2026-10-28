@@ -29,15 +29,12 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 function speechBubble(ctx, beat, cue) {
-  const p = span(beat, 0, 0.5, ease.backOut);
+  const p = span(beat, 0, 0.6, ease.expoOut);
   if (p <= 0) return;
   const [first, second] = cue.lines;
   ctx.save();
   ctx.translate(W / 2, 215);
   ctx.scale(p, p);
-  // a little jolt on every pose change
-  const jolt = Math.sin(Math.min(1, (beat % 0.5) / 0.5) * Math.PI) * 0.03;
-  ctx.rotate(beat < cue.hit ? (Math.floor(beat * 2) % 2 ? jolt : -jolt) : 0);
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = BRAND.ink;
   ctx.lineWidth = 12;
@@ -54,7 +51,7 @@ function speechBubble(ctx, beat, cue) {
   ctx.fillRect(-52, 127, 104, 18);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const s1 = span(beat, 0.25, 0.25, ease.backOut);
+  const s1 = span(beat, 0.25, 0.4, ease.expoOut);
   if (s1 > 0) {
     ctx.save();
     ctx.translate(0, -85);
@@ -64,7 +61,7 @@ function speechBubble(ctx, beat, cue) {
     ctx.fillText(first, 0, 0);
     ctx.restore();
   }
-  const s2 = span(beat, 0.75, 0.25, ease.backOut);
+  const s2 = span(beat, 0.9, 0.4, ease.expoOut);
   if (s2 > 0) {
     ctx.save();
     ctx.translate(0, 65);
@@ -119,7 +116,7 @@ function subscribeButton(ctx, beat, hit) {
 
 variants.subscribe = {
   async setup() {
-    await Promise.all(EBI_POSES.map(async (name) => {
+    await Promise.all(Object.keys(EBI_FILES).map(async (name) => {
       const img = new Image();
       img.src = `characters/${EBI_FILES[name]}`;
       await img.decode();
@@ -129,32 +126,19 @@ variants.subscribe = {
   draw(ctx, beat, cue) {
     ctx.fillStyle = BRAND.yellow;
     ctx.fillRect(0, 0, W, H);
-    stripes(ctx, beat);
+    stripes(ctx, beat * 0.4);
 
-    if (beat < cue.hit) {
-      // one pose per half beat, popping in from alternating sides
-      const k = Math.min(EBI_POSES.length - 1, Math.floor(beat / cue.every));
-      const age = beat - k * cue.every;
-      const pop = span(age, 0, 0.3, ease.backOut);
-      const side = [0, -1, 1, -0.6, 0.6, -1, 1][k];
-      const x = W / 2 + side * 420;
-      const tilt = (k % 2 ? 1 : -1) * 0.12 * (1 - pop) + Math.sin(beat * 9) * 0.03;
-      const height = EBI_POSES[k] === 'sleeping' ? 380 : 560;
-      drawEbi(ctx, EBI_POSES[k], x, H - 60 + (1 - pop) * 500, height * lerp(0.6, 1, pop), tilt);
-    } else {
-      // everyone lines up and bounces on the hit
-      const n = EBI_POSES.length;
-      EBI_POSES.forEach((name, i) => {
-        const p = span(beat, cue.hit + i * 0.04, 0.5, ease.backOut);
-        const x = W / 2 + (i - (n - 1) / 2) * 255;
-        const hop = Math.abs(Math.sin((beat - cue.hit) * Math.PI * 2 + i * 0.6)) * 26;
-        const height = name === 'sleeping' ? 220 : 330;
-        drawEbi(ctx, name, x, H - 250 - hop, height * p, Math.sin(beat * 6 + i) * 0.05);
-      });
-    }
+    // a few poses rise in one by one and stay, side by side
+    const n = cue.poses.length;
+    cue.poses.forEach((name, i) => {
+      const p = span(beat, 0.4 + i * cue.every, 0.6, ease.expoOut);
+      if (p <= 0) return;
+      const x = W / 2 + (i - (n - 1) / 2) * 400;
+      const sway = Math.sin(beat * Math.PI * 0.5 + i) * 0.025;
+      const hop = beat >= cue.hit ? Math.sin(clamp01((beat - cue.hit) / 0.6) * Math.PI) * 30 : 0;
+      drawEbi(ctx, name, x, H - 235 + (1 - p) * 120 - hop, 400, sway, p);
+    });
     speechBubble(ctx, beat, cue);
     subscribeButton(ctx, beat, cue.hit);
-    burst(ctx, beat, cue.hit, 17);
-    shockwave(ctx, beat, cue.hit, BRAND.red);
   },
 };
