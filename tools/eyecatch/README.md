@@ -1,6 +1,6 @@
 # Eyecatch stingers from code
 
-Ten two-second branded stingers (1920x1080, 60 fps, stereo 48 kHz) for chapter
+Ten two-second branded stingers plus the three-second `subscribe` call (1920x1080, 60 fps, stereo 48 kHz) for chapter
 breaks, rendered entirely from code. They sit alongside the three hand-made
 clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 `01_EBI_CHAN_OP` is no longer part of the Resolve template.
@@ -17,6 +17,7 @@ clips in `!動画素材` (`01_EBI_CHAN_OP`, `02_EBI_CHAN_OP`, `03_EBI_CHAN_IN`).
 | `orbit` | planets circle on tilted orbits, speed up and spiral into the centre | sonar pings echoing through space, a warbling FM pad that climbs, then a deep boom and FM bells |
 | `pixelate` | the logo arrives as coarse pixels and sharpens one step per beat | data chatter that gets faster and higher each step, bit-crushed, then a two-tone "done" chime |
 | `countdown` | an old film leader counts 4-3-2-1 with a sweeping hand, scratches and flicker | projector rattle at 24 clicks a second, a beep per number, then an orchestral hit |
+| `subscribe` | 3 s. えびフライ pops in in seven poses (one per half beat) under a 「チャンネル登録お願いします！」 bubble; on the hit all seven line up and the subscribe button is clicked | a cartoon pop per pose climbing the scale, a riser, then a click, a notification bell and brass |
 
 ## End card (`outro`)
 
@@ -110,6 +111,7 @@ python tools/eyecatch/render.py morph --out D:/素材
 - `timeline.json` — BPM, length, the hit beat, and each variant's own timing
 - `engine.js` — maths, easing, shared drawing, motion blur and finishing, the frame loop
 - `variants/<name>.js` — one picture per file (`outro.js` is the end card)
+- `characters/` — えびフライ poses used by `subscribe` (copied from ebi-explainer-video `assets/character`); a variant's `setup()` may be async to load images
 - `synth.py` — oscillators, noise, filters and the stereo `Mix`
 - `sounds/<name>.py` — one sound design per file, registered in `sounds/__init__.py`
 - `make_audio.py` / `render.py` — soundtrack assembly and the renderer
