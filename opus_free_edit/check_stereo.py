@@ -23,7 +23,7 @@ def mean_volume(path: str, channel: str) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
-    ap.add_argument("--max-diff", type=float, default=12.0)
+    ap.add_argument("--max-diff", type=float, default=6.0)
     a = ap.parse_args()
     left, right = mean_volume(a.video, "FL"), mean_volume(a.video, "FR")
     diff = abs(left - right)
