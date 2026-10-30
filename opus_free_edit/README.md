@@ -22,9 +22,17 @@ Only the steps that are the same for every recording are scripted:
 | private upload with title, captions, thumbnail | `upload_private.py` | never public; leaves `~/video-jobs/handoff/<video_id>/` so the post-upload automation keeps the editor thumbnail |
 
 ```bash
-WINNING_PATTERN=/path/to/winning-pattern.md \
-  opus_free_edit/run.sh /path/to/recording.mkv /path/to/job-dir   # add --no-upload to skip the upload
+# Usual case: he uploads the recording to ~/tmp/movies; wait for it, capture the deck, edit, upload private.
+DECK_SLUG=<deck slug> setsid nohup opus_free_edit/run.sh latest ~/video-jobs/<yyyymmdd-topic> \
+  > ~/video-jobs/<yyyymmdd-topic>.log 2>&1 &
+# A specific file instead:  opus_free_edit/run.sh /path/to/recording.mkv /path/to/job-dir [--no-upload]
 ```
+
+`<job dir>/appendix.md` (optional) is appended to the brief for one recording; `<job dir>/STATUS` ends as
+`done` or `failed` (poll it from a waiter). The brief's standing rules come from the presenter's reviews;
+`editing-techniques.md` is the researched catalogue of editing techniques (sources included) and
+`reference/<job>/` keeps the scripts and EDIT_NOTES of a well-received edit for the next agent to reuse.
+`tools/ebifry_clip.py` makes the えびフライ cameo clips (Gemini TTS).
 
 The job directory keeps everything the agent produced: `work/` (its EDL, render scripts,
 agent log) and `out/` (`final.mp4`, `youtube.json`, `captions.srt`, `thumbnail.png`,
