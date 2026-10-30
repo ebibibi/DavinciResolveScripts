@@ -1,23 +1,73 @@
 #!/usr/bin/env bash
 # One agentic edit: prepare -> claude -p (Opus decides everything) -> private upload -> usage report.
-# Usage: run.sh <source video> <job dir> [--no-upload]
+# Usage: run.sh <source video | latest> <job dir> [--no-upload]
+#   latest   = the newest .mp4/.mkv/.mov in $INBOX (default ~/tmp/movies, any letter case, e.g. C2078.MP4);
+#              waits until the upload has finished (no partial files, size stable 2 min, ffprobe reads it).
+# Env: DECK_SLUG (deck he talked through; captured from a clean origin/main worktree unless
+#      PRESENTATIONS_REPO is set), EDIT_MODEL, WINNING_PATTERN, INBOX.
+# A per-recording addendum in <job dir>/appendix.md is appended to the brief. <job dir>/STATUS ends as
+# done or failed, so a waiter can poll it.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
-SOURCE=$(realpath "$1"); JOB=$(realpath -m "$2"); UPLOAD=${3:-}
+JOB=$(realpath -m "$2"); UPLOAD=${3:-}
+INBOX=${INBOX:-$HOME/tmp/movies}
 MODEL=${EDIT_MODEL:-claude-opus-5-5}
-WINNING_PATTERN=${WINNING_PATTERN:-}
+WINNING_PATTERN=${WINNING_PATTERN:-$HOME/obsidian/02_Contexts/Youtuber活動/メインチャンネル/YouTube勝ちパターン（正本）.md}
 log() { printf '[run %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
+mkdir -p "$JOB"
+trap 'rc=$?; [[ $rc -eq 0 ]] && echo done > "$JOB/STATUS" || echo failed > "$JOB/STATUS"' EXIT
+
+latest_in_inbox() {
+  find "$INBOX" -maxdepth 1 -type f -iregex '.*\.\(mp4\|mkv\|mov\)' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -rn | head -1 | cut -d' ' -f2-
+}
+
+if [[ "$1" == latest ]]; then
+  echo waiting > "$JOB/STATUS"
+  log "wait for the newest recording in $INBOX to finish uploading"
+  prev=-1; stable=0
+  while :; do
+    SOURCE=$(latest_in_inbox)
+    if [[ -n "$SOURCE" ]] && ! compgen -G "$INBOX/*.partial" >/dev/null && ! compgen -G "$INBOX/*.part" >/dev/null; then
+      size=$(stat -c %s "$SOURCE")
+      if [[ "$size" == "$prev" ]]; then stable=$((stable + 20)); else stable=0; prev=$size; fi
+      if (( stable >= 120 )) && ffprobe -v error -show_entries format=duration -of csv=p=0 "$SOURCE" >/dev/null 2>&1; then
+        break
+      fi
+    fi
+    sleep 20
+  done
+else
+  SOURCE=$1
+fi
+SOURCE=$(realpath "$SOURCE")
+log "source: $SOURCE"
+echo running > "$JOB/STATUS"
+
+if [[ -n "${DECK_SLUG:-}" && -z "${PRESENTATIONS_REPO:-}" ]]; then
+  # The shared checkout may sit on someone's branch; capture the deck from a clean origin/main.
+  PRESENTATIONS_REPO="$JOB/work/presentations-web"
+  if [[ ! -d "$PRESENTATIONS_REPO" ]]; then
+    (cd "$HOME/presentations-web" && git fetch -q origin && git worktree add -q --detach "$PRESENTATIONS_REPO" origin/main)
+    (cd "$PRESENTATIONS_REPO" && npm ci --silent)
+  fi
+  export PRESENTATIONS_REPO
+fi
 
 t0=$(date +%s)
 "$HERE/prepare.sh" "$SOURCE" "$JOB"
 t1=$(date +%s)
 
-mkdir -p "$JOB/context"
+mkdir -p "$JOB/context" "$JOB/tools"
 ln -sfn "$REPO/assets" "$JOB/assets"
-[[ -n "$WINNING_PATTERN" && -f "$WINNING_PATTERN" ]] && cp "$WINNING_PATTERN" "$JOB/context/youtube-winning-pattern.md"
+ln -sfn "$HERE/reference" "$JOB/reference"
+[[ -f "$WINNING_PATTERN" ]] && cp "$WINNING_PATTERN" "$JOB/context/youtube-winning-pattern.md"
 cp "$HERE/brief.md" "$JOB/BRIEF.md"
-cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/check_silence.py" "$HERE/check_stereo.py" "$JOB/"
+if [[ -s "$JOB/appendix.md" ]]; then cat "$JOB/appendix.md" >> "$JOB/BRIEF.md"; fi
+cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/check_silence.py" "$HERE/check_stereo.py" \
+  "$HERE/editing-techniques.md" "$JOB/"
+cp "$HERE/tools/ebifry_clip.py" "$JOB/tools/"
 
 log "agent edit with $MODEL"
 cd "$JOB"
