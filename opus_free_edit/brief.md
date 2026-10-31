@@ -75,6 +75,14 @@ much of the value in these recordings is what is shown, not only what is said.
   zooms on small UI text, stingers, anything that makes it better to watch. Do not invent facts:
   on-screen text must be grounded in what is said or shown.
 - House rules learned from the presenter's review (non-negotiable):
+  - **Keep the order he spoke in.** Never move a block of his talk in front of what he said before it
+    (2026-11-01, AI週報: the ChatGPT part at 0:32–0:50 was moved in front of his greeting at 0:01–0:32 as a
+    "cold open"; he called it 「話してる順番がぶつ切り。明らかに間違っている」). Cutting retakes, fillers and dead
+    time is fine; reordering is not. If you want an answer-first cold open, **repeat** one short line
+    (≤ 8 s) in front as a teaser and then play everything from the start in the original order — the teaser
+    line is heard twice, nothing is skipped or shuffled. For the weekly shows (MS週報・AI週報) do not add a
+    teaser either: his opening already leads with the answer. Before rendering, list your talk blocks with
+    their source times and check they only go forward (each block's `src` start ≥ the previous block's end).
   - **Burn captions into every stretch where the presenter talks, and still deliver
     `out/captions.srt`** for the YouTube caption track (2026-10-04 request). Bottom centre, bold Noto
     Sans CJK JP **about 90 px at 1080p, never more than two lines** (2026-10-05: "bigger, two lines
@@ -170,7 +178,8 @@ skills, professional editors, TV variety and YouTube retention practice, with so
 What worked on 2026-10-29 and is now the baseline (see `reference/20261029-personal-data-leak/` for the
 scripts and EDIT_NOTES; reuse and improve them instead of starting from zero):
 
-- **Answer-first cold open**: his strongest answer line in the first seconds, warm-up trimmed.
+- **Answer-first cold open**: his strongest answer line in the first seconds, warm-up trimmed — as a
+  short repeated teaser, never by moving blocks out of order (see "Keep the order he spoke in" above).
 - **Layout variety for a reason**: full slide + round face PiP, slide-left + face-right, face + tracker,
   gentle punch-in (≤1.15x), recap. No layout longer than ~30 s of talk. **Switch at the end of a
   sentence or in a breath, not on a fixed clock**, and let the new picture land just after the next
