@@ -56,7 +56,11 @@ much of the value in these recordings is what is shown, not only what is said.
    the product of the week's biggest change, shown breaking or changing>"`.
    The series label (e.g. **MS週報**) must stand out as a big program-logo badge. Never ask for another
    expression or pose (surprised face, pointing): the model then redraws his face and it is no longer
-   him – that variant was rejected. Look at the result: same face as the photo, whole head visible,
+   him – that variant was rejected. **His eyes must be fully open** (2026-11-07 review: 「サムネイルの私の顔がだめですね。
+   目がきちんと開いてない」). The model copies the photo's eyelids, so pick the frame carefully: sample the recording every
+   second, compare enlarged face crops, prefer a closed or lightly smiling mouth, and pass that exact image. Do not
+   re-extract "the same second": it can land on a blink. Look at the result: same face as the photo, eyes fully open
+   when you zoom in on them (half-closed eyes do not show at a small size), no invented hands, whole head visible,
    nothing over the hair or face, every word spelt exactly. Regenerate (it is cheap) until it is right;
    if it never is, fall back to a real frame plus text and then save that frame as
    `work/thumbnail_source.png` and run `python3 check_thumbnail.py out/thumbnail.png --source
