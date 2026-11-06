@@ -6,7 +6,8 @@
 # Env: DECK_SLUG (deck he talked through; captured from a clean origin/main worktree unless
 #      PRESENTATIONS_REPO is set), EDIT_MODEL, WINNING_PATTERN, INBOX.
 # A per-recording addendum in <job dir>/appendix.md is appended to the brief. <job dir>/STATUS ends as
-# done or failed, so a waiter can poll it.
+# done or failed, so a waiter can poll it. Start it with start.sh so that a restart of the calling service
+# does not kill the job.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
@@ -17,6 +18,8 @@ WINNING_PATTERN=${WINNING_PATTERN:-$HOME/obsidian/02_Contexts/Youtuber活動/メ
 log() { printf '[run %s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 mkdir -p "$JOB"
 trap 'rc=$?; [[ $rc -eq 0 ]] && echo done > "$JOB/STATUS" || echo failed > "$JOB/STATUS"' EXIT
+# Without this, bash runs the EXIT trap with $?=0 when a signal kills the script and reports done.
+trap 'exit 143' TERM INT HUP
 
 latest_in_inbox() {
   find "$INBOX" -maxdepth 1 -type f -iregex '.*\.\(mp4\|mkv\|mov\)' -printf '%T@ %p\n' 2>/dev/null \

@@ -23,10 +23,13 @@ Only the steps that are the same for every recording are scripted:
 
 ```bash
 # Usual case: he uploads the recording to ~/tmp/movies; wait for it, capture the deck, edit, upload private.
-DECK_SLUG=<deck slug> setsid nohup opus_free_edit/run.sh latest ~/video-jobs/<yyyymmdd-topic> \
-  > ~/video-jobs/<yyyymmdd-topic>.log 2>&1 &
-# A specific file instead:  opus_free_edit/run.sh /path/to/recording.mkv /path/to/job-dir [--no-upload]
+DECK_SLUG=<deck slug> opus_free_edit/start.sh latest ~/video-jobs/<yyyymmdd-topic>
+# A specific file instead:  opus_free_edit/start.sh /path/to/recording.mkv /path/to/job-dir [--no-upload]
 ```
+
+`start.sh` runs `run.sh` in its own systemd user unit (`video-edit-<job>`) and logs to `<job dir>/run.log`.
+`setsid nohup` is not enough when the caller is a service: the job stays in the service's cgroup, and
+restarting the service kills it.
 
 `<job dir>/appendix.md` (optional) is appended to the brief for one recording; `<job dir>/STATUS` ends as
 `done` or `failed` (poll it from a waiter). The brief's standing rules come from the presenter's reviews;
