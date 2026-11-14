@@ -121,6 +121,12 @@ much of the value in these recordings is what is shown, not only what is said.
   - **No flicker.** Decide framing per frame index from the same integer frame counts used to cut
     (never from rounded continuous times), change framing only at a cut, keep each framing state at
     least about 1 s, and scan the final render for 1-3 frame anomalies before finishing.
+    **Overlays must be on every frame they belong to** (2026-11-15, HCCJP 第79回: 「エビフライが高速で点滅してる。
+    これはよくない」). The compositor cached each overlay's bounding box under `id(array)`; ids of freed per-frame
+    arrays are reused, so a stale "empty" entry dropped えびフライ on about one frame in eleven. Never key a cache
+    on `id()` of a per-frame object (key on content or the clip/frame index). Do not exclude cameos, telops or
+    bubbles from the flicker scan as "animation": measure, for each inserted overlay, that it is present on every
+    frame of its range (e.g. count its colour pixels per frame) and fix any frame where it vanishes.
   - **One integer clock for every input.** When several streams are combined (camera, slides,
     picture-in-picture), give each `settb=1/FPS,setpts=N` before overlaying; never use
     `setpts=N/FPS/TB` on inputs whose time bases differ (it drifts by a frame every few frames).
