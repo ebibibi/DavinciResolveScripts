@@ -62,7 +62,14 @@ much of the value in these recordings is what is shown, not only what is said.
    re-extract "the same second": it can land on a blink. Look at the result: same face as the photo, eyes fully open
    when you zoom in on them (half-closed eyes do not show at a small size), no invented hands, whole head visible,
    nothing over the hair or face, every word spelt exactly. Regenerate (it is cheap) until it is right;
-   if it never is, fall back to a real frame plus text and then save that frame as
+   if it never is, fall back to a real frame plus text (see below).
+   **Keep the real Microsoft MVP logo** when he wears the blue MVP shirt (embroidered "MVP / Microsoft Most
+   Valuable Professional" on the chest; 2026-11-10 and 2026-11-15 reviews: 「青いシャツの時に、MVPのロゴは消さないで」).
+   The image model redraws the shirt and drops or warps it, so after generating, crop the logo patch from the
+   source frame, scale it to the shirt, colour-match only the shirt fabric around it (keep the white lettering as is)
+   and paste it on his chest with a soft edge. Never blur, redraw or invent it. Compare the pasted logo with the
+   frame at full size (text, diamond, colours) before you finish, and note it in `out/EDIT_NOTES.md`.
+   For the real-frame fallback, save that frame as
    `work/thumbnail_source.png` and run `python3 check_thumbnail.py out/thumbnail.png --source
    work/thumbnail_source.png` (do **not** save `thumbnail_source.png` for an AI thumbnail: the pixel
    comparison only works for a pasted photo). The harness refuses to upload a rejected thumbnail.
