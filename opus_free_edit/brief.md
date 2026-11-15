@@ -116,6 +116,12 @@ much of the value in these recordings is what is shown, not only what is said.
   - **Zoom gently or not at all.** Never more than about 1.15x, keep head and shoulders with
     headroom. A close-up of the face is unpleasant to him. (2026-10-06: the camera now sits
     farther back, so the cap rose from 1.1x; 1.2x on the old framing was too close.)
+  - **Animated zoom must be smooth, or do not animate.** (2026-11-15, HCCJP 第79回: 「スライドを少しづつズームしてる。
+    かくかくしてて気持ち悪い。今の動きならズームしないほうがいい。ズームするならもっと滑らかに」.) A slow push-in
+    (Ken Burns) computed as an integer-pixel crop then resized moves in visible one-pixel jumps. Either keep the
+    picture static, or render the motion with sub-pixel precision (e.g. `cv2.warpAffine` with a float affine
+    matrix on the full image, not `img[y0:y1, x0:x1]` with rounded edges) and an eased curve, then check a few
+    consecutive frames that the scale changes every frame. When in doubt, static.
   - **Keep on-screen text up while its point is being talked about**, until the topic changes,
     not for a fixed few seconds.
   - **No flicker.** Decide framing per frame index from the same integer frame counts used to cut
