@@ -68,7 +68,7 @@ ln -sfn "$HERE/reference" "$JOB/reference"
 [[ -f "$WINNING_PATTERN" ]] && cp "$WINNING_PATTERN" "$JOB/context/youtube-winning-pattern.md"
 cp "$HERE/brief.md" "$JOB/BRIEF.md"
 if [[ -s "$JOB/appendix.md" ]]; then cat "$JOB/appendix.md" >> "$JOB/BRIEF.md"; fi
-cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/check_silence.py" "$HERE/check_stereo.py" \
+cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/check_silence.py" "$HERE/check_stereo.py" "$HERE/check_ebifry.py" \
   "$HERE/editing-techniques.md" "$JOB/"
 cp "$HERE/tools/ebifry_clip.py" "$JOB/tools/"
 
@@ -82,6 +82,7 @@ t2=$(date +%s)
 python3 "$HERE/usage_report.py" work/agent.jsonl > out/USAGE.md
 [[ -s out/final.mp4 ]] || { log "no out/final.mp4 – stopping before upload"; exit 1; }
 python3 "$HERE/check_stereo.py" out/final.mp4 || { log "audio is on one channel only – stopping before upload"; exit 1; }
+python3 "$HERE/check_ebifry.py" "$JOB" || { log "too few えびフライ cameos – stopping before upload (add cameos and rerun the upload)"; exit 1; }
 THUMB_SOURCE=()
 [[ -s work/thumbnail_source.png ]] && THUMB_SOURCE=(--source work/thumbnail_source.png)
 if [[ -s out/thumbnail.png ]] && ! python3 "$HERE/check_thumbnail.py" out/thumbnail.png "${THUMB_SOURCE[@]}"; then

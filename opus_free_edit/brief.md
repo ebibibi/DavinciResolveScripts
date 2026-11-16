@@ -228,13 +228,20 @@ vendors or people, facts never simplified for a gag.
 
 In EDIT_NOTES.md, a section 「飽きさせない工夫」: each device, where, why, and what you tried and dropped.
 
-## えびフライ cameos (always, unless he says otherwise)
+## えびフライ cameos (every video, at least 3)
 
 えびフライ is his fried-shrimp mascot (cheerful, a bit cheeky, casual Japanese, first person 「ぼく」, calls him
 「胡田さん」). About 5-8 short cameos (2-4 s) spread over the video: ツッコミ on what really happens (he gets
 passionate, a long aside, an obvious point, a repetition) or a viewer-voice question that his next line
 answers. Affectionate teasing only; a ボケ must never leave a wrong technical statement standing; no facts
-outside the recording and the deck. Fewer is better than forced.
+outside the recording and the deck.
+**Every video he records features えびフライ: at least 3 cameos, whatever the topic** (2026-11-16: 「私の動画には
+すべからくエビフライが登場するように」). On a serious topic (an outage, a leak, victims) do not drop him: use the
+calm kinds — a viewer-voice question his next line answers, a short 「なるほど」 recap, the subscribe eyecatch —
+instead of jokes. The harness counts the 「えびフライ：」 lines in `out/captions.srt` and refuses to upload with fewer
+than 3. Skip him only when he says so in the recording or the appendix; then write his words and where he said
+them to `work/NO_EBIFRY.txt`. In EDIT_NOTES.md list each cameo (time, kind: ツッコミ / question / recap, pose) so
+we can later compare which kinds keep viewers watching.
 
 Make the clips with `tools/ebifry_clip.py` (Gemini TTS, voice Fenrir; paid and limited to 100 requests a
 day — at most ~15 lines including retries):
