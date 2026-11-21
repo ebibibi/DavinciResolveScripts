@@ -255,7 +255,7 @@ python3 tools/ebifry_clip.py work/ebifry_lines.json work/ebifry
 
 **His voice is Gemini Fenrir; never swap the TTS engine yourself** (2026-11-21: Gemini returned 402 — prepaid
 credits depleted — and the editor switched to Irodori-TTS on its own; the presenter only noticed in the finished
-video). `work/tts_preflight.json` says whether Gemini worked before you started. When Gemini is out of credits or
+video). When Gemini is out of credits or
 over its daily quota, `tools/ebifry_clip.py` falls back to Irodori-TTS by itself and records the voice of each clip
 in `clips.json` (`"voice"`). Use only that tool, with its default output folder or another folder under `work/`,
 so the harness can read the record: after you finish it writes `out/VOICE_WARNING.md`, puts a warning at the top

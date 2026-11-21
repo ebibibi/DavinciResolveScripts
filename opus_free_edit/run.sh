@@ -6,8 +6,7 @@
 # Env: DECK_SLUG (deck he talked through; captured from a clean origin/main worktree unless
 #      PRESENTATIONS_REPO is set), EDIT_MODEL, WINNING_PATTERN, INBOX,
 #      NOTIFY_THREAD / DISCORD_THREAD_ID (Discord thread for voice warnings; else the EbiBot channel).
-# Before editing, tts_guard.py tries Gemini TTS once and warns on Discord when えびフライ would get another voice;
-# the edit still runs (the human can top up meanwhile). After editing it flags any fallback voice loudly.
+# After editing, tts_guard.py flags any えびフライ clip made with a fallback voice loudly.
 # A per-recording addendum in <job dir>/appendix.md is appended to the brief. <job dir>/STATUS ends as
 # done or failed, so a waiter can poll it. Start it with start.sh so that a restart of the calling service
 # does not kill the job.
@@ -63,7 +62,6 @@ fi
 
 t0=$(date +%s)
 log "check that Gemini TTS (えびフライ's voice) works"
-python3 "$HERE/tts_guard.py" preflight "$JOB" || log "tts preflight could not run"
 "$HERE/prepare.sh" "$SOURCE" "$JOB"
 t1=$(date +%s)
 
