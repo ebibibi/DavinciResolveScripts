@@ -6,6 +6,9 @@
 The face photo is passed as a reference image; background, motif, lighting and the Japanese text
 are generated as one picture. Then the image is scaled to 1280x720 and the real channel logo is
 pasted into the top-right corner the prompt keeps empty (skipped when the head is there anyway).
+When the frame shows the embroidered MVP logo (blue MVP shirt), the real logo pixels from the frame are
+pasted onto his shirt before anything is written (mvp_logo.py): the model always redraws the shirt and
+drops the logo, and a forgotten manual paste went out three times.
 
 Never ask the model to change the expression or pose (surprised face, pointing): it then redraws
 the face and it stops looking like him. That variant was rejected in the same review.
@@ -13,12 +16,13 @@ the face and it stops looking like him. That variant was rejected in the same re
 Usage:
   ai_thumbnail.py work/thumbnail_frame.png --headline "EWS廃止" --sub "Exchange Online" \
       --badge "MS週報" --motif "a cracked Exchange mail server falling apart" [--out out/thumbnail.png]
-Exit 0 = written and the whole head is visible, 1 = check failed, 2 = generation failed.
+Exit 0 = written, whole head visible and the MVP logo kept, 1 = check failed, 2 = generation failed.
 """
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +33,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_thumbnail  # noqa: E402  (copied next to this script in every job directory)
+import mvp_logo  # noqa: E402
 
 GPT_IMAGE = Path(os.environ.get(
     "GPT_IMAGE_SCRIPT", Path.home() / ".claude/skills/image-gen/scripts/gpt_image.py"))
@@ -70,6 +75,7 @@ Minimal and uncluttered.
 Required text, rendered perfectly and legibly, exactly as written:
 {numbered}
 No other text, no fake words, no watermark. Keep the bottom-right corner free (video length overlay).
+Show him from the chest up; keep the left side of his chest visible and free of text and objects.
 Keep the top-right corner (about 170x170 px) empty background for a logo: the presenter's head stays
 clearly below and left of it.
 """
@@ -121,8 +127,16 @@ def generate(prompt: str, face: Path, raw: Path, quality: str) -> None:
                    check=True, timeout=600)
 
 
-def finish(raw: Path, out: Path) -> None:
+def finish(raw: Path, out: Path, frame: Path) -> None:
+    """Scale to 1280x720, paste the real MVP logo when the frame has one, add the channel logo, write."""
+    source = cv2.imread(str(frame))
+    if source is None:
+        raise OSError(f"cannot read {frame}")
     image = Image.open(raw).convert("RGB").resize(OUT_SIZE, Image.LANCZOS)
+    pasted, mvp = mvp_logo.ensure_logo(source, cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR))
+    image = Image.fromarray(cv2.cvtColor(pasted, cv2.COLOR_BGR2RGB))
+    if mvp.found:
+        print(f"pasted the real MVP logo from {frame} ({mvp.describe()})")
     row = check_thumbnail.largest_face(cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR))
     head = logo_keepout(tuple(int(v) for v in row[:4])) if row is not None else None
     pos = pick_logo_corner(head)
@@ -150,14 +164,23 @@ def main() -> int:
     work, out = Path(args.work), Path(args.out)
     work.mkdir(parents=True, exist_ok=True)
     face, raw = work / "thumbnail_face.png", work / "thumbnail_ai_raw.png"
+    frame = Path(args.frame)
     try:
-        crop_face(Path(args.frame), face)
+        crop_face(frame, face)
+        # The pre-upload gate looks here for the frame the thumbnail was made from.
+        kept = work / "thumbnail_ai_frame.png"
+        if not (kept.exists() and kept.samefile(frame)):
+            shutil.copyfile(frame, kept)
         generate(build_prompt(args.headline, args.sub, args.badge, args.motif), face, raw, args.quality)
-        finish(raw, out)
+        finish(raw, out, frame)
+    except mvp_logo.MvpLogoError as exc:
+        print(f"THUMBNAIL REJECTED: MVP logo: {exc}")
+        return 1
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"ERROR: {exc}")
         return 2
     problems = check_thumbnail.check(out, None)
+    problems += mvp_logo.check(out, [(str(frame), cv2.imread(str(frame)))])
     if problems:
         print("THUMBNAIL REJECTED:\n- " + "\n- ".join(problems))
         return 1

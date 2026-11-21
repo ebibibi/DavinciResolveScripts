@@ -6,6 +6,7 @@
 # Env: DECK_SLUG (deck he talked through; captured from a clean origin/main worktree unless
 #      PRESENTATIONS_REPO is set), EDIT_MODEL, WINNING_PATTERN, INBOX,
 #      NOTIFY_THREAD / DISCORD_THREAD_ID (Discord thread for voice warnings; else the EbiBot channel).
+# Before upload, mvp_logo.py refuses a thumbnail that lost the MVP logo the recording shows.
 # After editing, tts_guard.py flags any えびフライ clip made with a fallback voice loudly.
 # A per-recording addendum in <job dir>/appendix.md is appended to the brief. <job dir>/STATUS ends as
 # done or failed, so a waiter can poll it. Start it with start.sh so that a restart of the calling service
@@ -71,7 +72,7 @@ ln -sfn "$HERE/reference" "$JOB/reference"
 [[ -f "$WINNING_PATTERN" ]] && cp "$WINNING_PATTERN" "$JOB/context/youtube-winning-pattern.md"
 cp "$HERE/brief.md" "$JOB/BRIEF.md"
 if [[ -s "$JOB/appendix.md" ]]; then cat "$JOB/appendix.md" >> "$JOB/BRIEF.md"; fi
-cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/check_silence.py" "$HERE/check_stereo.py" "$HERE/check_ebifry.py" \
+cp "$HERE/check_thumbnail.py" "$HERE/ai_thumbnail.py" "$HERE/mvp_logo.py" "$HERE/check_silence.py" "$HERE/check_stereo.py" "$HERE/check_ebifry.py" \
   "$HERE/editing-techniques.md" "$JOB/"
 cp "$HERE/tools/ebifry_clip.py" "$JOB/tools/"
 
@@ -91,6 +92,11 @@ THUMB_SOURCE=()
 [[ -s work/thumbnail_source.png ]] && THUMB_SOURCE=(--source work/thumbnail_source.png)
 if [[ -s out/thumbnail.png ]] && ! python3 "$HERE/check_thumbnail.py" out/thumbnail.png "${THUMB_SOURCE[@]}"; then
   log "thumbnail hides the presenter's face – stopping before upload (fix out/thumbnail.png and rerun the upload)"
+  exit 1
+fi
+# The frames and the recording show the embroidered MVP logo -> the thumbnail must show the real one too.
+if [[ -s out/thumbnail.png ]] && ! python3 "$HERE/mvp_logo.py" check out/thumbnail.png; then
+  log "thumbnail lost the real MVP logo – stopping before upload (python3 mvp_logo.py paste ..., then rerun the upload)"
   exit 1
 fi
 
