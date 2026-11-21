@@ -65,10 +65,14 @@ much of the value in these recordings is what is shown, not only what is said.
    if it never is, fall back to a real frame plus text (see below).
    **Keep the real Microsoft MVP logo** when he wears the blue MVP shirt (embroidered "MVP / Microsoft Most
    Valuable Professional" on the chest; 2026-11-10 and 2026-11-15 reviews: 「青いシャツの時に、MVPのロゴは消さないで」).
-   The image model redraws the shirt and drops or warps it, so after generating, crop the logo patch from the
-   source frame, scale it to the shirt, colour-match only the shirt fabric around it (keep the white lettering as is)
-   and paste it on his chest with a soft edge. Never blur, redraw or invent it. Compare the pasted logo with the
-   frame at full size (text, diamond, colours) before you finish, and note it in `out/EDIT_NOTES.md`.
+   `ai_thumbnail.py` does this for you: when the frame shows the logo it pastes the frame's real logo pixels on his
+   shirt before it writes the thumbnail, and it fails (exit 1) when the logo cannot be placed (regenerate with his chest
+   in view). Never blur, redraw or invent it. **Whenever `out/thumbnail.png` is changed by any other route** (your own
+   script, a manual edit, a picked older version), run `python3 mvp_logo.py check out/thumbnail.png` – it compares
+   with `work/thumbnail_frame.png`, `work/thumbnail_ai_frame.png`, `work/thumbnail_source.png` and frames of the
+   recording – and `python3 mvp_logo.py paste out/thumbnail.png --source work/thumbnail_frame.png` when it is missing.
+   The harness runs the same check before upload and refuses a thumbnail that lost the logo. Compare the pasted logo
+   with the frame at full size (text, diamond, colours) before you finish, and note it in `out/EDIT_NOTES.md`.
    For the real-frame fallback, save that frame as
    `work/thumbnail_source.png` and run `python3 check_thumbnail.py out/thumbnail.png --source
    work/thumbnail_source.png` (do **not** save `thumbnail_source.png` for an AI thumbnail: the pixel
