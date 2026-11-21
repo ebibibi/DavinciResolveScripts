@@ -1,4 +1,4 @@
-"""えびフライの声が Gemini 以外になったら、編集前と完成時に見落とせない形で知らせる（2026-11-21）。"""
+"""えびフライの声が Gemini 以外になったら、完成時に見落とせない形で知らせる（2026-11-21）。"""
 import importlib
 import json
 import subprocess
@@ -29,36 +29,6 @@ def _clips(job: Path, voices: dict, folder: str = "ebifry") -> None:
                                               for k, v in voices.items()}), encoding="utf-8")
 
 
-# ---------- preflight ----------
-
-def test_preflight_402_notifies_before_editing(tmp_path):
-    job = _job(tmp_path)
-    sent = []
-
-    def probe():
-        raise CreditsDepleted("Gemini TTS のプリペイド残高が尽きました（402）")
-    result = tts_guard.preflight(job, probe=probe, send=sent.append)
-    assert result["ok"] is False and result["kind"] == "credits"
-    assert len(sent) == 1
-    assert "えびフライの声がいつもと違う声になります" in sent[0] and "AI Studio" in sent[0]
-    saved = json.loads((job / "work" / "tts_preflight.json").read_text(encoding="utf-8"))
-    assert saved["kind"] == "credits"
-
-
-def test_preflight_recognises_402_from_a_plain_http_error(tmp_path):
-    def probe():
-        raise RuntimeError("HTTP Error 402: Payment Required")
-    assert tts_guard.preflight(_job(tmp_path), probe=probe, send=lambda m: None)["kind"] == "credits"
-
-
-def test_preflight_ok_stays_quiet(tmp_path):
-    sent = []
-    result = tts_guard.preflight(_job(tmp_path), probe=lambda: None, send=sent.append)
-    assert result["ok"] is True and sent == []
-
-
-# ---------- report ----------
-
 def test_report_flags_fallback_voice_at_the_top_of_edit_notes(tmp_path):
     job = _job(tmp_path)
     (job / "out" / "EDIT_NOTES.md").write_text("# 編集メモ\n本文\n", encoding="utf-8")
@@ -84,14 +54,6 @@ def test_report_silent_when_all_gemini(tmp_path):
     _clips(job, {"e01": "gemini:Fenrir", "e02": "gemini:Fenrir"})
     assert tts_guard.report(job) is None
     assert not (job / "out" / "VOICE_WARNING.md").exists()
-
-
-def test_report_warns_when_gemini_failed_and_no_voice_was_recorded(tmp_path):
-    """The agent may have made clips some other way: without a record, a failed preflight is enough."""
-    job = _job(tmp_path)
-    tts_guard.preflight(job, probe=lambda: (_ for _ in ()).throw(CreditsDepleted("402")), send=lambda m: None)
-    _clips(job, {"e01": None})
-    assert "可能性が高い" in tts_guard.report(job)
 
 
 def test_report_silent_when_ebifry_was_waived(tmp_path):
@@ -145,9 +107,9 @@ def test_notify_falls_back_to_ebibot_and_never_raises(monkeypatch):
 
 # ---------- run.sh wiring ----------
 
-def test_run_sh_checks_before_prepare_and_reports_after_the_agent():
+def test_run_sh_reports_after_the_agent_and_never_probes_gemini():
     run = (OPUS / "run.sh").read_text(encoding="utf-8")
-    assert run.index("tts_guard.py\" preflight") < run.index("prepare.sh\" \"$SOURCE\"")
+    assert "preflight" not in run  # the prepayment tops itself up; a test request per job only costs money
     assert run.index("usage_report.py") < run.index("tts_guard.py\" report") < run.index("python3 \"$HERE/check_stereo.py\"")
     assert run.index("upload_private.py\" \"$JOB\"") < run.index("tts_guard.py\" announce")
 

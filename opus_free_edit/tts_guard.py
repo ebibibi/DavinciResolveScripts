@@ -3,10 +3,10 @@
 えびフライ speaks with Gemini TTS (Fenrir). When Gemini cannot be used (prepaid credits depleted = HTTP 402,
 daily quota), tools/ebifry_clip.py falls back to Irodori-TTS, which sounds different. On 2026-11-21 that
 fallback was only mentioned deep inside EDIT_NOTES.md and the presenter noticed it in the finished video.
+There is no check before editing: the Gemini prepayment now tops itself up (2026-11-21), so a test request
+per job would only spend money.
 
 Usage:
-  tts_guard.py preflight <job>  before editing: try Gemini once (one short request); tell Discord if it fails.
-                                Never stops the job (see README: the edit runs on and the human can top up).
   tts_guard.py report <job>     after editing: if any cameo used another voice, write out/VOICE_WARNING.md
                                 and put a banner at the top of out/EDIT_NOTES.md.
   tts_guard.py announce <job>   after upload: tell Discord again, with the video URL, when VOICE_WARNING.md exists.
@@ -15,18 +15,14 @@ Discord target: $NOTIFY_THREAD or $DISCORD_THREAD_ID (the thread that started th
 """
 from __future__ import annotations
 
-import datetime as dt
 import json
 import os
 import sys
-import tempfile
 import urllib.request
 from pathlib import Path
 
-EXPLAINER_REPO = Path(os.path.expanduser(os.environ.get("EBI_EXPLAINER_REPO", "~/work/ebi-explainer-video")))
 BOT_ENV_FILES = ("~/claude-code-discord-bridge/.env", "~/discord-bot/.env")
 EBIBOT_NOTIFY = os.environ.get("EBIBOT_NOTIFY_URL", "http://127.0.0.1:8099/api/notify")
-PREFLIGHT = "work/tts_preflight.json"
 WARNING = "out/VOICE_WARNING.md"
 BANNER_MARK = "<!-- voice-warning -->"
 GEMINI_PREFIX = "gemini"
@@ -73,45 +69,6 @@ def notify(message: str) -> bool:
         return False
 
 
-# ---------- preflight ----------
-
-def _classify(exc: Exception) -> str:
-    name = type(exc).__name__
-    if name == "CreditsDepleted" or "402" in str(exc):
-        return "credits"
-    if name == "QuotaExceeded":
-        return "quota"
-    return "error"
-
-
-def probe_gemini() -> None:
-    """One short Gemini TTS request with no retries. Raises when Gemini cannot be used."""
-    if str(EXPLAINER_REPO) not in sys.path:
-        sys.path.insert(0, str(EXPLAINER_REPO))
-    from explainer.tts import gemini  # noqa: PLC0415 - lives in another repo
-    with tempfile.TemporaryDirectory() as d:
-        gemini.probe(Path(d) / "probe.wav")
-
-
-def preflight(job: Path, probe=probe_gemini, send=notify) -> dict:
-    try:
-        probe()
-        result = {"ok": True, "kind": "ok", "message": "Gemini TTS（Fenrir）は使えます"}
-    except Exception as e:  # noqa: BLE001 - every failure is reported, none stops the job
-        kind = _classify(e)
-        result = {"ok": False, "kind": kind, "message": f"{REASONS[kind]} 詳細: {str(e)[:300]}"}
-    result["checked_at"] = dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    (job / "work").mkdir(parents=True, exist_ok=True)
-    (job / PREFLIGHT).write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
-    if not result["ok"]:
-        print(f"[tts_guard] !!! {result['message']}", flush=True)
-        send(f"⚠️ **えびフライの声がいつもと違う声になります**（動画編集 `{job.name}`）\n"
-             f"{REASONS[result['kind']]}\n"
-             "編集はこのまま進めます（約2時間）。編集中に残高を足せば、その後に作るえびフライの声は"
-             "いつもの Gemini（Fenrir）に戻ります。足さなければ代わりの声（Irodori-TTS）で作り、完成報告で知らせます。")
-    return result
-
-
 # ---------- report ----------
 
 def clip_voices(job: Path) -> dict[str, str]:
@@ -128,28 +85,16 @@ def clip_voices(job: Path) -> dict[str, str]:
     return voices
 
 
-def _preflight_result(job: Path) -> dict:
-    try:
-        return json.loads((job / PREFLIGHT).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
 def assess(job: Path) -> str | None:
     """Return a Japanese warning when the video may not use the usual voice, else None."""
     if (job / "work" / "NO_EBIFRY.txt").exists():
         return None
     voices = clip_voices(job)
     other = sorted({v for v in voices.values() if not v.startswith(GEMINI_PREFIX) and v != "unknown"})
-    gemini = [k for k, v in voices.items() if v.startswith(GEMINI_PREFIX)]
-    pre = _preflight_result(job)
     if other:
         n = sum(1 for v in voices.values() if not v.startswith(GEMINI_PREFIX) and v != "unknown")
         return (f"えびフライのセリフ {len(voices)} 本のうち {n} 本が、いつもの Gemini（Fenrir）ではなく"
                 f" **{', '.join(other)}** の声です。")
-    if pre and not pre.get("ok") and not gemini:
-        return ("編集前の確認で Gemini TTS が使えませんでした。えびフライの声がいつもの Gemini（Fenrir）"
-                "ではない可能性が高いです（どの声で作ったかの記録がありません）。")
     return None
 
 
@@ -157,8 +102,7 @@ def report(job: Path) -> str | None:
     warning = assess(job)
     if not warning:
         return None
-    pre = _preflight_result(job)
-    cause = pre.get("message") or REASONS["error"]
+    cause = REASONS["error"]
     body = (f"# ⚠️ えびフライの声がいつもと違います\n\n{warning}\n\n"
             f"- 原因: {cause}\n"
             f"- 直し方: {TOP_UP}。そのあと `tools/ebifry_clip.py` で作り直し（古い `<id>.wav` を消してから）、"
@@ -190,11 +134,11 @@ def announce(job: Path, send=notify) -> bool:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3 or argv[1] not in ("preflight", "report", "announce"):
+    if len(argv) != 3 or argv[1] not in ("report", "announce"):
         print(__doc__, file=sys.stderr)
         return 2
     job = Path(argv[2]).resolve()
-    {"preflight": preflight, "report": report, "announce": announce}[argv[1]](job)
+    {"report": report, "announce": announce}[argv[1]](job)
     return 0
 
 

@@ -9,7 +9,6 @@ Only the steps that are the same for every recording are scripted:
 
 | step | script | notes |
 |---|---|---|
-| えびフライ's voice (Gemini TTS) works before editing | `tts_guard.py preflight` | one short request; on 402 (credits depleted) or daily quota it warns on Discord (`NOTIFY_THREAD` / `DISCORD_THREAD_ID`, else EbiBot) and the edit **continues** |
 | probe, 16 kHz audio, 540p proxy | `prepare.sh` | proxy is used for previews |
 | Whisper large-v3-turbo with word timestamps | `prepare.sh` | runs on the GPU host (`WHISPER_HOST`, default `spark`) |
 | name and sign-off normalised in the transcript | `fix_transcript.py` | Whisper prompt describes them; the script fixes remaining variants |
@@ -40,10 +39,9 @@ restarting the service kills it.
 `tools/ebifry_clip.py` makes the えびフライ cameo clips (Gemini TTS; when Gemini is out of credits or over its daily
 quota it falls back to Irodori-TTS by itself and records the voice of each clip).
 
-Why a failed TTS preflight does not stop the job: the edit runs unattended for about two hours and uploads only
-as private, so stopping would cost the whole edit for one missing voice. The warning arrives before the edit
-starts; topping up the credits during the edit restores Gemini for every clip made afterwards; otherwise the
-finished video is flagged in three places and its cameo clips can be remade with Gemini later.
+No Gemini check before editing: the prepayment tops itself up (2026-11-21), so a test request per job would
+only spend money. If a clip still falls back to another voice, `tts_guard.py report` / `announce` flag it after
+the edit (no API calls).
 
 The job directory keeps everything the agent produced: `work/` (its EDL, render scripts,
 agent log) and `out/` (`final.mp4`, `youtube.json`, `captions.srt`, `thumbnail.png`,
