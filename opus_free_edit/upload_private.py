@@ -22,7 +22,7 @@ def write_handoff(video_id: str, out: Path) -> None:
     """Leave the editor's thumbnail and metadata where the post-upload automation looks for them."""
     target = HANDOFF_DIR / video_id
     target.mkdir(parents=True, exist_ok=True)
-    for name in ("thumbnail.png", "youtube.json"):
+    for name in ("thumbnail.png", "youtube.json", "VOICE_WARNING.md"):
         if (out / name).exists():
             shutil.copy2(out / name, target / name)
     print(f"handoff written: {target}")

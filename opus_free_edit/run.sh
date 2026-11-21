@@ -4,7 +4,10 @@
 #   latest   = the newest .mp4/.mkv/.mov in $INBOX (default ~/tmp/movies, any letter case, e.g. C2078.MP4);
 #              waits until the upload has finished (no partial files, size stable 2 min, ffprobe reads it).
 # Env: DECK_SLUG (deck he talked through; captured from a clean origin/main worktree unless
-#      PRESENTATIONS_REPO is set), EDIT_MODEL, WINNING_PATTERN, INBOX.
+#      PRESENTATIONS_REPO is set), EDIT_MODEL, WINNING_PATTERN, INBOX,
+#      NOTIFY_THREAD / DISCORD_THREAD_ID (Discord thread for voice warnings; else the EbiBot channel).
+# Before editing, tts_guard.py tries Gemini TTS once and warns on Discord when えびフライ would get another voice;
+# the edit still runs (the human can top up meanwhile). After editing it flags any fallback voice loudly.
 # A per-recording addendum in <job dir>/appendix.md is appended to the brief. <job dir>/STATUS ends as
 # done or failed, so a waiter can poll it. Start it with start.sh so that a restart of the calling service
 # does not kill the job.
@@ -59,6 +62,8 @@ if [[ -n "${DECK_SLUG:-}" && -z "${PRESENTATIONS_REPO:-}" ]]; then
 fi
 
 t0=$(date +%s)
+log "check that Gemini TTS (えびフライ's voice) works"
+python3 "$HERE/tts_guard.py" preflight "$JOB" || log "tts preflight could not run"
 "$HERE/prepare.sh" "$SOURCE" "$JOB"
 t1=$(date +%s)
 
@@ -80,6 +85,7 @@ claude -p "Read BRIEF.md in the current directory and carry it out completely." 
 t2=$(date +%s)
 
 python3 "$HERE/usage_report.py" work/agent.jsonl > out/USAGE.md
+python3 "$HERE/tts_guard.py" report "$JOB" || log "voice report could not run"
 [[ -s out/final.mp4 ]] || { log "no out/final.mp4 – stopping before upload"; exit 1; }
 python3 "$HERE/check_stereo.py" out/final.mp4 || { log "audio is on one channel only – stopping before upload"; exit 1; }
 python3 "$HERE/check_ebifry.py" "$JOB" || { log "too few えびフライ cameos – stopping before upload (add cameos and rerun the upload)"; exit 1; }
@@ -94,6 +100,7 @@ if [[ "$UPLOAD" != "--no-upload" ]]; then
   log "private upload"
   python3 "$HERE/upload_private.py" "$JOB"
 fi
+python3 "$HERE/tts_guard.py" announce "$JOB" || log "voice announcement could not run"
 t3=$(date +%s)
 printf '\n## Wall time\n\n| stage | seconds |\n|---|---|\n| prepare | %d |\n| agent | %d |\n| upload | %d |\n| total | %d |\n' \
   $((t1-t0)) $((t2-t1)) $((t3-t2)) $((t3-t0)) >> out/USAGE.md
