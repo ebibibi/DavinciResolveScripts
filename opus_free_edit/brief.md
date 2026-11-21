@@ -250,8 +250,17 @@ day — at most ~15 lines including retries):
 python3 tools/ebifry_clip.py work/ebifry_lines.json work/ebifry
 # lines.json: [{"id": "g01", "text": "字幕に出す文", "spoken": "読み（任意・ひらがな可）", "pose": "faceup"}]
 # poses: standing / glasses / faceup / ageage (excited) / rockstar / dark (gloomy) / sleeping (bored)
-# out: work/ebifry/<id>.mov (560x520 RGBA, PNG codec, 30 fps, stereo 48 kHz), clips.json (seconds)
+# out: work/ebifry/<id>.mov (560x520 RGBA, PNG codec, 30 fps, stereo 48 kHz), clips.json (seconds, voice)
 ```
+
+**His voice is Gemini Fenrir; never swap the TTS engine yourself** (2026-11-21: Gemini returned 402 — prepaid
+credits depleted — and the editor switched to Irodori-TTS on its own; the presenter only noticed in the finished
+video). `work/tts_preflight.json` says whether Gemini worked before you started. When Gemini is out of credits or
+over its daily quota, `tools/ebifry_clip.py` falls back to Irodori-TTS by itself and records the voice of each clip
+in `clips.json` (`"voice"`). Use only that tool, with its default output folder or another folder under `work/`,
+so the harness can read the record: after you finish it writes `out/VOICE_WARNING.md`, puts a warning at the top
+of `out/EDIT_NOTES.md` and tells Discord again with the upload. Do not write your own TTS wrapper. If a clip was made
+with a fallback voice, say so in the first lines of your final summary too.
 
 Check each clip says its line (Whisper or duration). Put the cameo in a natural pause **between** his
 sentences (insert time; never talk over him). His line goes in a speech bubble (Noto Sans CJK JP Bold,
