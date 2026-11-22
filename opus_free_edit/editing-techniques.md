@@ -202,3 +202,70 @@
 - 中田敦彦のYouTube大学・リベ大の編集手法: 「テンポがよい」「すっきり」という評価記事しかなく、具体的な手法の一次資料はなかった
 - Ali Abdaal / Johnny Harris の手法: 本人・チームの一次資料はなく、ベンダーや受注者のまとめのみ [二次]
 - MrBeast 資料の「1〜3分／3〜6分／6分以降」の各役割の詳細は、二次要約では確認できなかった
+
+---
+
+## 5. 縦型ショート（SNS単体で完結）の技法
+
+調査日: 2026-11-22。ショートモード（`shorts-brief.md`）の参考。長尺（字幕焼き込み済み）から、TikTok・Instagram・Facebook・Threads・X で単体で見て意味のある縦型動画を作る。
+表記: 印なし＝一次情報（媒体の公式ページ・SKILL.md・作者本人の発言）。[二次]＝二次情報だけ。[未確認]＝一次情報で確かめられていないもの。[判断]＝ここで決めた既定値で、出典なし。
+
+| # | 技法 | 何をするか | 自動編集での実装ヒント（ffmpeg/Python） | 出典 |
+|---|---|---|---|---|
+| 1 | 最初のコマに見出しを出す | 開いた瞬間に「何の話か」を画面上の一文で示す。Instagram は「最初のコマの強い一文は良いサムネイルと同じくらい効く」と書いている | 0フレーム目から見出しを出す。フェードインしない | [IG 公式ガイド](https://about.instagram.com/blog/tips-and-tricks/how-to-make-instagram-reels) |
+| 2 | 見出しは一瞬で読める長さ | 英語圏の目安は6語以内。日本語は15〜20字・2行以内 [判断] | 字数を検査する。上寄りの安全域（y≈288〜640）に置く | [shorts-text-safe-zones SKILL.md](https://github.com/HUSS41N/theunfinishedco/blob/main/skills/shorts-text-safe-zones/SKILL.md)、0.25秒認知の調査 [二次]（[Marketing Dive](https://www.marketingdive.com/news/facebook-why-mobile-video-ads-must-work-fast/446217/)） |
+| 3 | タイトルカードを挟まない | 一番強い絵に見出しを重ねる。黒背景のカードはつかみの数秒を捨てる | 話している映像の上に重ねる | [shorts-hooks-story SKILL.md](https://github.com/HUSS41N/theunfinishedco/blob/main/skills/shorts-hooks-story/SKILL.md) |
+| 4 | 前提なしで通じる文から始める | 「で」「つまり」「さっきの」「これは」で始めない | 文頭が接続詞・指示語なら一つ前の文頭まで戻すか、別の文を先頭にする | [Melvynx clips SKILL.md](https://github.com/Melvynx/video-agent-skills/blob/main/skills/clips/SKILL.md)、[longform-to-shorts SKILL.md](https://github.com/nidhi-singh02/skills/blob/main/skills/longform-to-shorts/SKILL.md) |
+| 5 | 長編への参照を全部消す | 「前回」「次に」「この動画では」「2つ目は」を切る | NG 語で文字起こしを検索。完成品を再度文字起こしして確かめる | 同上 |
+| 6 | 単体で成り立つかを採点する | 前提なしで始まる／1つの主張／きれいに終わる／外部参照なし／20〜60秒、を各0〜2点、7点以上 | 候補ごとに採点表を残す | [clips SKILL.md](https://github.com/Melvynx/video-agent-skills/blob/main/skills/clips/SKILL.md) |
+| 7 | 素材の種類で候補を拾う | 主張・体験談・数字・失敗・ハウツー・質問への回答で候補を時刻つきで一覧に。長編1本で3〜8候補 | plan.md に一覧を書いてから選ぶ | 同上 |
+| 8 | つかみの型 | 意外な事実・問い・結果を先に見せる・警告・具体的な数字。「1秒目でハイライトか予告でつかむ。前置きでだらだらさせない」 | 見出し案を複数出して絞る。数字・固有名詞を含む案を優先 | [TikTok Newsroom](https://newsroom.tiktok.com/scroll-stopping-tips-from-top-tiktok-creators?lang=en-GB)、型の分布は OpusClip の自社集計 [二次]（[Opus](https://www.opus.pro/blog/video-editing-tips)） |
+| 9 | 最初の3秒で中身を示す | TikTok の指針「最初の3秒で提案内容を示す」「最初の6秒でつかみを優先」 | 0〜3秒に見出しと結論の一文 | [TikTok Ads 公式](https://ads.tiktok.com/help/article/creative-best-practices?lang=en) |
+| 10 | 結末を予告して回収する | 「理由は3つ」のように最後に分かることを約束し、最後に回収する | 見出しと最後の一文を対で設計する | Jenny Hoyos [二次・自動文字起こし]（[vidIQ/rosetta](https://rosetta.to/u/vidiq/how-jenny-hoyos-actually-makes-viral-shorts)） |
+| 11 | 1本1主張・20〜60秒 | 教育系は15〜60秒が目安（Instagram はチュートリアルの最適帯と呼ぶ） | 60〜75秒は理由があるときだけ | [IG 公式ガイド](https://about.instagram.com/blog/tips-and-tricks/how-to-make-instagram-reels)、[OpenShorts](https://github.com/mutonby/openshorts) |
+| 12 | 起伏のある構成 | 速いつかみ→中盤→山場→速い終わり。「早口にせず少ない言葉で」 | えびフライのツッコミを山場に1回 | Jenny Hoyos [二次]（同上） |
+| 13 | 50〜60%で転換 | 羅列だけは離脱を招く。中盤で前提をひっくり返す・代償を見せる | 構成に転換の時刻を持たせる | [shorts-hooks-story](https://github.com/HUSS41N/theunfinishedco/blob/main/skills/shorts-hooks-story/SKILL.md) |
+| 14 | 間と息継ぎを詰める | 0.4秒超の間はたいてい削れる | `silencedetect=noise=-35dB:d=0.4`、切り目に30〜200ms余白と `afade=d=0.03` | [video-use SKILL.md](https://raw.githubusercontent.com/browser-use/video-use/main/SKILL.md)、[async](https://async.com/blog/how-to-edit-instagram-reels/) [二次] |
+| 15 | 無音は音声で判定する | ASR の語の終了時刻は後ろの無音に食い込む。開始時刻は信頼できる | 無音判定は RMS/silencedetect で | [shorts-edit SKILL.md](https://github.com/timscheuerai/content-vault/blob/main/skills/shorts-edit/SKILL.md) |
+| 16 | 少しだけ速くする | 1.1倍程度で密度を上げる（声の高さは保つ） | `atempo=1.1`＋`setpts=PTS/1.1`。字幕は速度変更後に合わせる | [longform-to-shorts](https://github.com/nidhi-singh02/skills/blob/main/skills/longform-to-shorts/SKILL.md) |
+| 17 | 2〜4秒ごとに画面を変える | 寄り・カット・強調のどれか。切るのは話の区切りで、一定間隔ではない | 文節境界に変化点。最長約5秒で何か変える | [vertical-shorts SKILL.md](https://github.com/iamaanahmad/agents-video-editing-skills/blob/main/skills/vertical-shorts/SKILL.md)、[shorts-edit](https://github.com/timscheuerai/content-vault/blob/main/skills/shorts-edit/SKILL.md) |
+| 18 | 寄りは要所だけ | 30秒で11回寄った例を3回に減らすと「癖に見えなくなった」 | ≤1.15倍（本人の常設ルール）、30秒に3〜4回まで [判断] | [async](https://async.com/blog/how-to-edit-instagram-reels/) [二次] |
+| 19 | 字幕は短い単位、強調語に色 | 2〜4語ずつ、話している語を強調。動く字幕が主流 | ASS の `\k`。日本語は文節単位、1枚5〜12字・最大2行 [判断] | [vertical-shorts](https://github.com/iamaanahmad/agents-video-editing-skills/blob/main/skills/vertical-shorts/SKILL.md)、[opensource-clipping](https://github.com/NaufalRizqullah/opensource-clipping) |
+| 20 | 字幕の大きさと表示時間 | 見出し≥84px、本文≥52px（幅1080）。字幕の間を3〜11フレーム空けると点滅に見える | 日本語は1秒4〜6字を上限 [判断] | [shorts-text-safe-zones](https://github.com/HUSS41N/theunfinishedco/blob/main/skills/shorts-text-safe-zones/SKILL.md)、[TikTok Ads](https://ads.tiktok.com/help/article/creative-best-practices?lang=en) |
+| 21 | UI に隠れない範囲に置く | Meta は上14%・下35%・左右6%に文字を置かないよう求める。右のボタン列も避ける | 文字の箱が `platforms.json` の safe に収まるか検査 | [Meta 広告ガイド（Reels）](https://www.facebook.com/business/ads-guide/update/video/instagram-reels)、[shorts-text-safe-zones](https://github.com/HUSS41N/theunfinishedco/blob/main/skills/shorts-text-safe-zones/SKILL.md) |
+| 22 | 焼き込み字幕と二重にしない | 元の字幕を残したまま重ねない。元に字幕があれば足さない | 字幕帯を切り落とすか、生の収録から作り直す | [OpenShorts](https://github.com/mutonby/openshorts)、本人指示（2026-11-22） |
+| 23 | 上にスライド・下に顔 | スライド場面は上下分割、顔だけの場面は顔に寄せる | `vstack`。境目に字幕 | [OpenShorts](https://github.com/mutonby/openshorts)、[vertical-shorts](https://github.com/iamaanahmad/agents-video-editing-skills/blob/main/skills/vertical-shorts/SKILL.md) |
+| 24 | スライドが映ってから切り替える | 話がスライドに触れた時点ではなく、画面に出た時点でレイアウトを変える | 出現時刻をフレームで確定 | [longform-to-shorts](https://github.com/nidhi-singh02/skills/blob/main/skills/longform-to-shorts/SKILL.md) |
+| 25 | 要の数字・図を大きく抜く | 数字や図の部分だけを画面いっぱいに拡大して見せる | 該当矩形を `crop` して全画面に。発話の語に着地を合わせる | [video-use SKILL.md](https://raw.githubusercontent.com/browser-use/video-use/main/SKILL.md) |
+| 26 | 顔のフレーミングを揺らさない | 追従するなら不感帯と平滑化。グリーンバックなら固定クロップで足りる [判断] | MediaPipe 0.25秒ごと、場面転換で履歴リセット | [opensource-clipping](https://github.com/NaufalRizqullah/opensource-clipping) |
+| 27 | キャラをつかみ役・ツッコミ役に | マスコットの一言で冒頭や転換を作る。暴走気味のマスコット人格が Duolingo の TikTok 成長に効いたとされる | えびフライの一言を1本1〜2回、安全域内に | Duolingo [二次]（[The Drum](https://www.thedrum.com/news/2025/02/25/duolingo-s-tiktok-mastermind-its-unhinged-social-strategy-and-killing-its-mascot)） |
+| 28 | ループで終える | 最後の一文が冒頭の問いに答え、1コマ目に戻っても自然に続く。最後は強いコマでスパッと切る | 末尾に無音を残さない。登録の呼びかけ・アウトロ・ロゴなし | [vertical-shorts](https://github.com/iamaanahmad/agents-video-editing-skills/blob/main/skills/vertical-shorts/SKILL.md)、[shorts-hooks-story](https://github.com/HUSS41N/theunfinishedco/blob/main/skills/shorts-hooks-story/SKILL.md) |
+| 29 | 送りたくなる結論で締める | 非フォロワーへの配信では「送信」がやや重要（Mosseri）。TikTok は完走・シェア・フォローを強い信号に挙げる | 持ち帰れる一文で終える | [SMT（Mosseri 2025）](https://www.socialmediatoday.com/news/instagram-shares-algorithm-insights-2025/738034/) [二次]、[TikTok Newsroom](https://newsroom.tiktok.com/en-us/how-tiktok-recommends-videos-for-you/) |
+| 30 | 書き出し前の自己検査 | 切り目の前後、冒頭2秒、末尾2秒、中盤のフレームを見る。-14 LUFS、TP ≤ -1 dBTP | `ebur128=peak=true`。検査は最大3周、残りは人に上げる | [video-use SKILL.md](https://raw.githubusercontent.com/browser-use/video-use/main/SKILL.md) |
+
+### 媒体ごとの違い
+
+| 媒体 | 長さ | 編集上の注意 | 出典 |
+|---|---|---|---|
+| TikTok | 教育系は20〜60秒、濃い話だけ60〜90秒 [判断]。1分超は Creator Rewards の対象（日本で使えるかは [未確認]） | 音ありの文化。字幕は自分で入れる | [TikTok Newsroom](https://newsroom.tiktok.com/introducing-the-new-creator-rewards-program?lang=en)、[TikTok Ads](https://ads.tiktok.com/help/article/creative-best-practices?lang=en) |
+| Instagram Reels | 3秒〜3分。チュートリアルは15〜60秒 | 他アプリの透かしは不利。見出しと字幕は別物として両方 | [IG 公式ガイド](https://about.instagram.com/blog/tips-and-tricks/how-to-make-instagram-reels)、[IG creators](https://creators.instagram.com/blog/the-latest-with-instagram) |
+| Facebook Reels | アプリは2025年に制限撤廃。API 投稿は90秒 | Reels と同じ書き出しで流用できる | [Meta Newsroom 2025](https://about.fb.com/news/2025/06/making-it-easier-create-videos-facebook/) |
+| Threads | 最長5分。投稿文500字 | 文章が主役。動画は短く、要点は投稿文に [判断] | [Meta Newsroom 2023](https://about.fb.com/news/2023/07/introducing-threads-new-app-text-sharing/) |
+| X | 無料アカウントは140秒まで | 140秒以内に収める | [X Help](https://help.x.com/en/using-x/premium-longer-videos) [二次] |
+
+数値の設定は `shorts_platforms.json`（ハーネスの検査 `check_shorts.py` が読む）。
+
+### やってはいけないこと
+
+- **YouTube へ誘導しない**（本人指示 2026-11-22）。「続きはYouTubeで」「概要欄」「前回」「この動画では」を残さない
+- **冒頭に前置きを置かない**。あいさつ・ロゴ・ブランドイントロ・黒背景のタイトルカード・フェードインはなし
+- **終わりに余計なものを付けない**。終わりのあいさつ、登録やフォローのお願い、エンドカード、末尾の無音
+- **字幕を二重にしない・UI に隠れる範囲に置かない**（下35%・右のボタン列）
+- **一定間隔で機械的に切らない・寄りを乱発しない**
+- **語の途中で切らない**（ASR の終了時刻を信じない）
+- **数字や固有名詞を文字起こしのまま載せない**。映像と照合する。**数字を作らない**
+- **出典のない数字を規則にしない**（「85%が無音で視聴」「3秒ルール」は出所が古い・業者ブログ）
+
+### 読めなかった一次情報
+
+TikTok Creator Academy の公式ページは見つからず、TikTok の安全域は公式テンプレートを第三者が換算した値止まり。X Help は取得拒否で検索抜粋のみ。日本の縦型ショートの字の大きさ・位置の公式な指針は見つからなかった（日本語向けの数値は [判断]）。

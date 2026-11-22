@@ -51,3 +51,27 @@ those are the candidates to move into `prepare.sh` next.
 
 The agent runs with `--permission-mode bypassPermissions` inside the job directory. Run it only on
 recordings you own, on a machine where that is acceptable.
+
+## Shorts mode (vertical shorts for the SNS post queue)
+
+The same free-form idea for TikTok / Instagram / Facebook / Threads / X: the agent watches a finished long video
+and plans and edits vertical 9:16 shorts that stand on their own on each platform — how many, which ideas, the hook,
+えびフライ, telops, layout, ending and a post text per platform are all its call (`shorts-brief.md`). It is not a
+clipper: the old yt-shorts-maker approach (pick a segment, crop, add a title) was rejected by the presenter.
+
+```bash
+# A long video edited by this repository: pass its job dir or its YouTube id (looked up in ~/video-jobs/*/out/youtube_upload.json)
+opus_free_edit/start_shorts.sh <long job dir | video id | video file> ~/video-jobs/<yyyymmdd-topic>-shorts
+```
+
+| step | script | notes |
+|---|---|---|
+| transcript, proxy, frames, contact sheets of the finished video | `prepare.sh` | same as the long edit |
+| the long job linked as `long/` | `run_shorts.sh` | raw green-screen recording, slides, えびフライ clips, EDIT_NOTES |
+| the shorts edit | `claude -p` with `shorts-brief.md` | `platforms.json` (= `shorts_platforms.json`) gives limits, safe zones and sources |
+| fallback voice flagged | `tts_guard.py report` | as in the long edit |
+| size, codec, length per platform, stereo, no YouTube call-to-action in post texts | `check_shorts.py` | `STATUS` ends `failed` when a short breaks a rule |
+
+Output: `out/<id>.mp4` (or one file per platform), `out/shorts.json` (files and post texts per platform),
+`out/SHORTS_NOTES.md` (the planning memo), `out/<id>_sheet.jpg`. Nothing is uploaded or posted.
+Researched short-form techniques: `editing-techniques.md` §5.
