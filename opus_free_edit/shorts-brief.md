@@ -66,6 +66,16 @@ Extract more frames or audio whenever you need to look closer.
 6. Facts: never invent numbers or claims; on-screen text comes from what he says or shows. Health, money and
    security statements keep their caveats (e.g. "this is my own record; follow your doctor").
 
+## Known traps (from the abandoned clipper trial, 2026-11-22)
+
+The finished long video contains things that must never reach a short. Each of these passed an LLM self-score in
+the old trial, so check them by eye on your own frames, not by asking yourself whether it is fine:
+- the **subscribe eyecatch** (えびフライ 「チャンネル登録お願いします！」, `assets/eyecatch/EBI_CHAN_EYECATCH_subscribe.mp4`), the
+  end card, 「Stay Hungry. Stay Foolish. 胡田でした」 and the greeting / "today I will talk about" preview at the start;
+- a part that **starts or ends mid-sentence** (「朝の血圧も高い日、」「もしも いろいろ」「なくて判断すべき…」);
+- a short whose topic word (e.g. AI) never appears on screen or in the first line.
+Full notes: `~/obsidian/02_Contexts/Youtuber活動/kb/SNS縦型動画の引き継ぎ_各SNSの動画仕様・焼き込み字幕の判定・投稿待ちへの添付.md`.
+
 ## How to work
 
 1. **Understand the whole long video first** (EDIT_NOTES, youtube.json, transcript, contact sheets). List the
