@@ -1,23 +1,99 @@
 {
   "_about": "Vertical shorts for the manual SNS post queue (Ebi AI Console). Platform ids match ebibibi-claude-settings promote-all/post_targets.json. Values checked 2026-11-22; sources below. safe = px kept free of text/face at 1080x1920 (top/bottom/left/right). Attachments to the post queue are limited to 200 MB.",
-  "canvas": {"width": 1080, "height": 1920, "fps": 30},
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
   "attachment_max_bytes": 209715200,
   "targets": {
-    "tiktok":    {"max_duration": 600, "safe": {"top": 240, "bottom": 660, "left": 64, "right": 120},
-                  "notes": "Sound-on culture; captions are added by creators themselves. Safe zone from TikTok's ad templates (no official number).",
-                  "sources": ["https://ads.tiktok.com/help/article/video-ads-specifications", "https://ads.tiktok.com/help/article/creative-best-practices?lang=en"]},
-    "instagram": {"max_duration": 180, "safe": {"top": 270, "bottom": 672, "left": 64, "right": 64},
-                  "notes": "Over 3 min is not recommended to non-followers. Tutorials do best at 15-60 s. Meta asks to keep text out of the top 14 %, bottom 35 %, sides 6 %. Watermarks of other apps are penalised.",
-                  "sources": ["https://about.instagram.com/blog/tips-and-tricks/how-to-make-instagram-reels", "https://www.facebook.com/business/ads-guide/update/video/instagram-reels"]},
-    "facebook":  {"max_duration": 90, "safe": {"top": 270, "bottom": 672, "left": 64, "right": 64},
-                  "notes": "90 s is the Reels API limit (the app lifted limits in 2025); keep it at 90 s. Post text without the YouTube URL.",
-                  "sources": ["https://developers.facebook.com/documentation/video-api/guides/reels-publishing", "https://about.fb.com/news/2025/06/making-it-easier-create-videos-facebook/"]},
-    "threads":   {"max_duration": 300, "safe": {"top": 120, "bottom": 300, "left": 40, "right": 40},
-                  "notes": "Text-first; post text max 500 chars carries the point, the video supports it.",
-                  "sources": ["https://developers.facebook.com/documentation/threads/overview.md"]},
-    "x":         {"max_duration": 140, "safe": {"top": 120, "bottom": 300, "left": 40, "right": 40},
-                  "notes": "Free accounts: 140 s and 512 MB. Post text: 140 full-width characters.",
-                  "sources": ["https://help.x.com/en/using-x/premium-longer-videos", "https://docs.x.com/x-api/media/quickstart/best-practices.md"]}
+    "tiktok": {
+      "max_duration": 600,
+      "safe": {
+        "top": 240,
+        "bottom": 660,
+        "left": 64,
+        "right": 120
+      },
+      "notes": "Sound-on culture; captions are added by creators themselves. Safe zone from TikTok's ad templates (no official number).",
+      "sources": [
+        "https://ads.tiktok.com/help/article/video-ads-specifications",
+        "https://ads.tiktok.com/help/article/creative-best-practices?lang=en"
+      ]
+    },
+    "instagram": {
+      "max_duration": 180,
+      "safe": {
+        "top": 270,
+        "bottom": 672,
+        "left": 64,
+        "right": 64
+      },
+      "notes": "Over 3 min is not recommended to non-followers. Tutorials do best at 15-60 s. Meta asks to keep text out of the top 14 %, bottom 35 %, sides 6 %. Watermarks of other apps are penalised.",
+      "sources": [
+        "https://about.instagram.com/blog/tips-and-tricks/how-to-make-instagram-reels",
+        "https://www.facebook.com/business/ads-guide/update/video/instagram-reels"
+      ]
+    },
+    "facebook": {
+      "max_duration": 90,
+      "safe": {
+        "top": 270,
+        "bottom": 672,
+        "left": 64,
+        "right": 64
+      },
+      "notes": "90 s is the Reels API limit (the app lifted limits in 2025); keep it at 90 s. Post text without the YouTube URL.",
+      "sources": [
+        "https://developers.facebook.com/documentation/video-api/guides/reels-publishing",
+        "https://about.fb.com/news/2025/06/making-it-easier-create-videos-facebook/"
+      ]
+    },
+    "threads": {
+      "max_duration": 300,
+      "safe": {
+        "top": 120,
+        "bottom": 300,
+        "left": 40,
+        "right": 40
+      },
+      "notes": "Text-first; post text max 500 chars carries the point, the video supports it.",
+      "sources": [
+        "https://developers.facebook.com/documentation/threads/overview.md"
+      ]
+    },
+    "x": {
+      "max_duration": 140,
+      "safe": {
+        "top": 120,
+        "bottom": 300,
+        "left": 40,
+        "right": 40
+      },
+      "notes": "Free accounts: 140 s and 512 MB. Post text: 140 full-width characters.",
+      "sources": [
+        "https://help.x.com/en/using-x/premium-longer-videos",
+        "https://docs.x.com/x-api/media/quickstart/best-practices.md"
+      ]
+    }
   },
-  "forbidden_in_posts": ["youtube.com", "youtu.be", "続きはYouTube", "続きは YouTube", "本編はこちら", "本編で", "概要欄", "チャンネル登録", "フル動画", "プロフのリンク", "プロフィールのリンク"]
+  "forbidden_in_posts": [
+    "youtube.com",
+    "youtu.be",
+    "続きはYouTube",
+    "続きは YouTube",
+    "本編はこちら",
+    "本編で",
+    "概要欄",
+    "チャンネル登録",
+    "フル動画",
+    "プロフのリンク",
+    "プロフィールのリンク",
+    "リンクから",
+    "noteで",
+    "続きは",
+    "全文はこちら",
+    "詳しくはこちら",
+    "link in bio"
+  ]
 }

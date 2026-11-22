@@ -39,6 +39,11 @@ Extract more frames or audio whenever you need to look closer.
 
 ## His standing requirements (from his reviews — non-negotiable)
 
+0. **Never send viewers to another platform** — 「ほかのプラットフォームに誘導するのはやらない」 (2026-11-22, for every
+   network, video and text alike). Each short and each post text is complete and worth having on that network by
+   itself. No 「続きはYouTubeで」, 「詳しくはプロフィールのリンクから」, 「noteで全文」, 「本編はこちら」, no end card, no
+   "link in bio", no teaser that hides the conclusion for elsewhere: say the finding in the short. A link, where the
+   platform shows one, is only a source — never a call to click.
 1. **Standalone on the platform. No pointing to YouTube** (2026-11-22). No 「続きはYouTubeで」, 「本編は概要欄」,
    end cards, subscribe calls, channel logos or "link in bio". Nothing in the video or the post text may need the
    long video to make sense: cut 「前回」「この動画では」「2つ目は」「さっき言った」 and anything that refers back.
