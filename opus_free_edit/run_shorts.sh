@@ -70,7 +70,8 @@ t2=$(date +%s)
 python3 "$HERE/usage_report.py" work/agent.jsonl > out/USAGE.md || log "usage report could not run"
 # Flags new えびフライ lines made with a fallback voice (out/VOICE_WARNING.md).
 python3 "$HERE/tts_guard.py" report "$JOB" || log "voice report could not run"
-python3 "$HERE/check_shorts.py" "$JOB" --platforms platforms.json || { log "shorts failed the checks"; exit 1; }
+# The trusted spec from the repository, not the agent-writable copy in the job directory.
+python3 "$HERE/check_shorts.py" "$JOB" --platforms "$HERE/shorts_platforms.json" || { log "shorts failed the checks"; exit 1; }
 printf '\n## Wall time\n\n| stage | seconds |\n|---|---|\n| prepare | %d |\n| agent | %d |\n| total | %d |\n' \
   $((t1-t0)) $((t2-t1)) $((t2-t0)) >> out/USAGE.md
 log "done"; cat out/USAGE.md

@@ -69,8 +69,13 @@ def check_short(job: Path, short: dict, spec: dict) -> list[str]:
     for platform, rel in files.items():
         if platform in spec["targets"]:
             by_file.setdefault(rel, []).append(platform)
+    out = (job / "out").resolve()
     for rel, platforms in by_file.items():
-        problems += check_file(job / rel, platforms, spec)
+        path = (job / rel).resolve()
+        if not path.is_relative_to(out):
+            problems.append(f"{sid}: {rel} is outside out/")
+            continue
+        problems += check_file(path, platforms, spec)
     for platform in files:
         text = (posts.get(platform) or "").strip()
         if not text:
