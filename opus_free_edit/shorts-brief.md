@@ -63,7 +63,13 @@ Extract more frames or audio whenever you need to look closer.
 5. On-screen Japanese text uses the Windows 11 fonts: **Yu Gothic UI** (Bold for telops/captions; fall back to
    `Yu Gothic` Bold) and **Segoe UI** for Latin. Check `fc-match "Yu Gothic UI:bold"` before rendering.
    Do not use Noto Sans CJK here.
-6. Facts: never invent numbers or claims; on-screen text comes from what he says or shows. Health, money and
+6. **End with a short closing eyecatch, 1-2 s** (2026-11-22, on the first trial: 「全部いいんだけど、唐突に終わるので、
+   最後にはアイキャッチが欲しい」). After the final line lands, a brief branded close so the short does not stop abruptly:
+   e.g. the channel's stinger look, えびフライ, the short's theme in one phrase — your design. It must not invite
+   anyone anywhere (no subscribe, follow, YouTube, profile or link — rule 0): check any stock asset before using it
+   (`assets/eyecatch/EBI_CHAN_EYECATCH_subscribe.mp4` and `assets/EBI_CHAN_OUTRO.mp4` ask for subscriptions — never use
+   them). Keep it short enough that a looping viewer is not lost; its audio is a soft sting, never over his words.
+7. Facts: never invent numbers or claims; on-screen text comes from what he says or shows. Health, money and
    security statements keep their caveats (e.g. "this is my own record; follow your doctor").
 
 ## Known traps (from the abandoned clipper trial, 2026-11-22)
