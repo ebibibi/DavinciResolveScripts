@@ -89,6 +89,11 @@ much of the value in these recordings is what is shown, not only what is said.
   retakes, dead time, off-topic tangents, technical trouble), chapters, on-screen text, emphasis,
   zooms on small UI text, stingers, anything that makes it better to watch. Do not invent facts:
   on-screen text must be grounded in what is said or shown.
+- Memory: the machine has ~31 GB shared with other jobs, and an out-of-memory kill takes down this whole
+  edit. Never load a whole video (or a long range of frames) into RAM — e.g. one `ffmpeg ... -f rawvideo -`
+  read into a numpy array plus `.astype(int16)` / `np.diff` on a 40-minute video needs 30 GB+.
+  Stream frames in chunks from the pipe, keep only a small rolling window, stay in uint8, and keep any
+  analysis script under ~2 GB peak. (2026-11-23: a QA script did this on AZ-900 #10 and the job was OOM-killed.)
 - House rules learned from the presenter's review (non-negotiable):
   - **Keep the order he spoke in.** Never move a block of his talk in front of what he said before it
     (2026-11-01, AI週報: the ChatGPT part at 0:32–0:50 was moved in front of his greeting at 0:01–0:32 as a
