@@ -95,6 +95,13 @@ much of the value in these recordings is what is shown, not only what is said.
   Stream frames in chunks from the pipe, keep only a small rolling window, stay in uint8, and keep any
   analysis script under ~2 GB peak. (2026-11-23: a QA script did this on AZ-900 #10 and the job was OOM-killed.)
 - House rules learned from the presenter's review (non-negotiable):
+  - **Never cut him off mid-sentence or mid-vowel.** Whisper word stamps end too early on a drawn-out ending
+    (「それぞれー」「ねー」) and a block end taken from them chops the sentence (2026-11-23, AZ-900 #10: 「7:12あたり、
+    それぞれーってまだ喋ってるのにぶつっと切られちゃってます」 — four block ends had cut 「…やっていきます」「…感じになりますね」).
+    End every block after the sentence actually finishes (read the words after your end time), and extend every cut
+    end while the audio itself is still sounding (gaps <= 0.1 s) before padding. Before rendering, list every cut
+    where the source audio keeps sounding >= 0.2 s past the cut and the next kept piece does not start there, and
+    fix each one or explain it in EDIT_NOTES.md.
   - **Keep the order he spoke in.** Never move a block of his talk in front of what he said before it
     (2026-11-01, AI週報: the ChatGPT part at 0:32–0:50 was moved in front of his greeting at 0:01–0:32 as a
     "cold open"; he called it 「話してる順番がぶつ切り。明らかに間違っている」). Cutting retakes, fillers and dead
