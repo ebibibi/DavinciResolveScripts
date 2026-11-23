@@ -20,7 +20,10 @@ for name in DECK_SLUG PRESENTATIONS_REPO EDIT_MODEL WINNING_PATTERN INBOX YT_TOK
 done
 
 echo starting > "$JOB/STATUS"
+# OOMPolicy=continue: if one child (e.g. an analysis script) is OOM-killed, the agent gets an error and can
+# recover, instead of systemd killing the whole unit. MemoryHigh throttles before the machine runs out.
 if ! systemd-run --user --unit="$UNIT" --collect --working-directory="$JOB" "${ENV_ARGS[@]}" \
+    -p OOMPolicy=continue -p MemoryHigh=24G \
     -p "StandardOutput=append:$JOB/run.log" -p "StandardError=append:$JOB/run.log" \
     "$HERE/run.sh" "$SOURCE" "$JOB" "$@"; then
   echo failed > "$JOB/STATUS"
