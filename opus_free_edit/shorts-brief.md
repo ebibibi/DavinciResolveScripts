@@ -34,6 +34,10 @@ rejected — do not do that.
 - `platforms.json` – each platform's length and size limits, safe zones and notes, with sources.
 - `editing-techniques.md` – researched editing techniques with sources; **§5 is about vertical shorts**.
 - `assets/`, `reference/`, `tools/ebifry_clip.py` (new えびフライ lines, see below).
+  `reference/20261122-shorts-ai-overwork/` is the **approved first shorts job** (2026-11-22, 「OK、本番へ」): its plan,
+  SHORTS_NOTES and scripts (matting the raw recording with Robust Video Matting when there is no green screen,
+  vertical graphics, captions, the closing eyecatch `eyecatch.py`). Reuse and improve them instead of starting over;
+  the ideas and structure must still be new for each video.
 
 Extract more frames or audio whenever you need to look closer.
 
