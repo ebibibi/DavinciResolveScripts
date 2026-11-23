@@ -143,6 +143,13 @@ His line is shown in a speech bubble (not as a second caption) and he speaks bet
                 "source_ranges": [[start_s, end_s], ...], "uses_ebifry": true}]}
    ```
    `files` and `posts` list only the platforms you made that short for (a short may skip a platform).
+   **Post texts carry the substance** (2026-11-23: 「その SNS 内の文字を読んだだけで利益があるような分量・内容で書きたい。
+   リンク先まではほとんどの人が飛ばない前提で」). Assume nobody opens a link or watches the long video: state the conclusion
+   in the first line (before the platform folds the text) and then give the key points — steps, criteria, numbers —
+   at the length each platform suits. Lengths and per-platform rules come from
+   `python3 ~/.claude/skills/promote-all/scripts/post_queue.py --guide` (source of truth: `post_targets.json`).
+   Facebook is shared from the Instagram post (2026-11-23), so write the Instagram text for both audiences; a
+   `facebook` entry is accepted but not queued.
 3. `out/SHORTS_NOTES.md` (Japanese) – the planning memo the presenter reads: what the long video offers, every
    candidate you considered and why you chose or dropped it, for each short: the idea, why the hook works, the
    structure beat by beat (with times in the short), how えびフライ is used or why not, the caption decision
