@@ -54,6 +54,13 @@ much of the value in these recordings is what is shown, not only what is said.
    `python3 ai_thumbnail.py work/thumbnail_frame.png --headline "<3-7 chars, e.g. EWS廃止>" --sub
    "<product, e.g. Exchange Online>" --badge "<series label, e.g. MS週報, or omit>" --motif "<in English:
    the product of the week's biggest change, shown breaking or changing>"`.
+   **The thumbnail must say what the video is about and make the viewer want to take part** (2026-11-24 review of
+   the full-stack self-score video: 「サムネイルが悪い。IT業界の『フルスタック』の話だと分かるようにし、『自分も採点
+   してみたい』と思わせるサムネイルにして」). A clever metaphor from the deck (there: a 16-storey building with
+   "何マス埋まる？") does not tell a stranger the topic. Put the topic word itself in the headline (本当のフルスタック),
+   show the format as an object the viewer recognises (an exam-style score sheet with IT icons, ◎○△× marks, a few
+   empty "?" boxes and a red pen), and address the viewer in the sub line (ITの64項目 あなたは何点？). For a quiz,
+   self-check or ranking video the hook is "you", not the presenter's own score.
    The series label (e.g. **MS週報**) must stand out as a big program-logo badge. Never ask for another
    expression or pose (surprised face, pointing): the model then redraws his face and it is no longer
    him – that variant was rejected. **His eyes must be fully open** (2026-11-07 review: 「サムネイルの私の顔がだめですね。
